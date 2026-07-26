@@ -45,6 +45,40 @@ class RefusalReason(str, Enum):
     NOT_RELEVANT = "not_relevant"
 
 
+class DocOrigin(str, Enum):
+    """Where a document came from. Builtin docs are pinned in the UI and are
+    the offline demo fallback; uploads are reader-supplied and disposable."""
+
+    BUILTIN = "builtin"
+    UPLOAD = "upload"
+
+
+class LanguageSource(str, Enum):
+    """How we arrived at the language a document was digitised in.
+
+    Surfaced in the UI rather than kept internal: a reader who can see we
+    *guessed* the language can correct us, and a reader who can see we asked
+    knows we did not guess. Detection is a claim about our own process, so it
+    is held to the same standard as a claim about the document.
+    """
+
+    BUILTIN = "builtin"  # hardcoded for doc_a / doc_b
+    DETECTED = "detected"  # /text-lid, corroborated by the script we can see
+    SCRIPT = "script"  # LID disagreed; the script maps 1:1, so we overruled it
+    USER = "user"  # ambiguous or unrecognised script — the reader told us
+
+
+class StarterQuestion(Frozen):
+    """A suggested opening question for a document.
+
+    Model-authored *input*, never a citation. An answer to one still goes
+    through the same line-anchored gate as anything the reader types.
+    """
+
+    text: str = Field(description="In the document's own language")
+    gloss: str = Field(default="", description="English gloss, so a non-reader can follow")
+
+
 class Block(Frozen):
     """One layout region of the page, as returned in the page-level JSON.
 
@@ -88,6 +122,18 @@ class DigitisedDoc(Frozen):
     digitised_at: str
     page_count: int = 1
     blocks: tuple[Block, ...] = ()
+
+    # Provenance of the document and of its language. Every field below is
+    # defaulted on purpose: `doc_a.json` and `doc_b.json` are already on disk
+    # and are the offline fallback for a dead API during the demo. A field
+    # without a default would stop them deserialising.
+    origin: DocOrigin = DocOrigin.BUILTIN
+    label: str = Field(default="", description="Display name; for uploads, the original filename")
+    language_source: LanguageSource = LanguageSource.BUILTIN
+    probe_language: str = Field(
+        default="",
+        description="What the probe pass used, so a bad detection stays diagnosable",
+    )
 
     def block_at(self, offset: int) -> Block | None:
         """The block containing a character offset, if any."""

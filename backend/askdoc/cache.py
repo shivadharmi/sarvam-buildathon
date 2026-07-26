@@ -11,19 +11,37 @@ best-effort only).
 from __future__ import annotations
 
 import json
+import re
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import CACHE_DIR
-from .models import Block, DigitisedDoc
+from .models import Block, DigitisedDoc, DocOrigin, LanguageSource, StarterQuestion
 from .tables import flatten_tables
 
 
-def _path_for(doc_id: str) -> Path:
-    if not doc_id or "/" in doc_id or doc_id.startswith("."):
+# `doc_id` used to be safe by construction: it could only come from the
+# hardcoded DOCUMENTS dict. Uploads change that -- it now arrives from a URL
+# path and from user-supplied bytes -- so the shape is whitelisted rather than
+# individual attacks blacklisted. Anything outside this alphabet cannot name a
+# file at all, which rules out traversal, absolute paths and NTFS streams in
+# one rule instead of three.
+_SAFE_DOC_ID = re.compile(r"\A[a-z0-9_]{1,64}\Z")
+
+
+def _check_doc_id(doc_id: str) -> str:
+    if not _SAFE_DOC_ID.match(doc_id or ""):
         raise ValueError(f"unsafe doc_id: {doc_id!r}")
-    return CACHE_DIR / f"{doc_id}.json"
+    return doc_id
+
+
+def _path_for(doc_id: str) -> Path:
+    return CACHE_DIR / f"{_check_doc_id(doc_id)}.json"
+
+
+def _starters_path_for(doc_id: str) -> Path:
+    return CACHE_DIR / f"{_check_doc_id(doc_id)}.starters.json"
 
 
 def save(doc: DigitisedDoc) -> Path:
@@ -56,6 +74,29 @@ def list_cached() -> list[DigitisedDoc]:
 BLOCK_SEPARATOR = "\n\n"
 
 
+def save_starters(doc_id: str, questions: tuple[StarterQuestion, ...]) -> Path:
+    """Persist generated starter questions beside the document.
+
+    Kept in their own file rather than on DigitisedDoc: the document is the
+    digitisation artifact and rewriting it to attach suggestions would churn
+    the very thing every citation offset indexes into.
+    """
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    path = _starters_path_for(doc_id)
+    payload = [q.model_dump() for q in questions]
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def load_starters(doc_id: str) -> tuple[StarterQuestion, ...] | None:
+    """Cached starters, or None if they have never been generated."""
+    path = _starters_path_for(doc_id)
+    if not path.exists():
+        return None
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return tuple(StarterQuestion.model_validate(q) for q in raw)
+
+
 def build_doc(
     *,
     doc_id: str,
@@ -63,6 +104,10 @@ def build_doc(
     raw_blocks: list[dict],
     source_filename: str,
     page_count: int = 1,
+    origin: DocOrigin = DocOrigin.BUILTIN,
+    label: str = "",
+    language_source: LanguageSource = LanguageSource.BUILTIN,
+    probe_language: str = "",
 ) -> DigitisedDoc:
     """Assemble page blocks into the canonical document we store.
 
@@ -107,4 +152,8 @@ def build_doc(
         digitised_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         page_count=page_count,
         blocks=tuple(blocks),
+        origin=origin,
+        label=label,
+        language_source=language_source,
+        probe_language=probe_language,
     )
