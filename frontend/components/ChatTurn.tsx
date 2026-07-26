@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import type { AnswerRecord, RefusalReason, SpeechSource } from "@/lib/types";
 import { useSpeech } from "@/lib/useSpeech";
 
@@ -143,6 +145,10 @@ export function ChatTurn({ record, gloss, isActive, onSelect }: ChatTurnProps) {
         </div>
       )}
 
+      {/* The record is the artifact, so sharing it shares the proof: the link
+          opens the answer beside the page, with the citation re-checked. */}
+      {record.record_id && <ShareButton recordId={record.record_id} />}
+
       {/* Audio that just stops looks exactly like a page that just ends. */}
       {(speech.truncated.answer || speech.truncated.quote) && (
         <p className="mt-1.5 pl-3 text-xs text-faint">
@@ -203,5 +209,39 @@ function SpeakerGlyph({ playing }: { playing: boolean }) {
       <path d="M8.5 2.5 4.75 5.5H2.25v5h2.5l3.75 3z" />
       <path d="M11 5.75a3 3 0 0 1 0 4.5" strokeLinecap="round" />
     </svg>
+  );
+}
+
+/**
+ * Copy a link to this answer.
+ *
+ * Offered on refusals as well as citations. "This page doesn't say" is a
+ * result, and often the most useful thing a reader can forward to whoever told
+ * them it did.
+ */
+function ShareButton({ recordId }: { recordId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <div className="mt-1.5 pl-3">
+      <button
+        type="button"
+        onClick={async () => {
+          const url = `${window.location.origin}/r/${recordId}`;
+          try {
+            await navigator.clipboard.writeText(url);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          } catch {
+            // Clipboard is blocked outside a secure context. Show the link so
+            // it can still be copied by hand rather than failing silently.
+            window.prompt("Copy this link", url);
+          }
+        }}
+        className="eyebrow text-faint underline-offset-2 transition-colors hover:text-duplicator hover:underline"
+      >
+        {copied ? "Link copied" : "Copy link to this answer"}
+      </button>
+    </div>
   );
 }

@@ -133,7 +133,11 @@ class TestDocuments:
             client.get("/documents")
 
     def test_health_reports_available_documents(self, client):
-        assert client.get("/health").json() == {"ok": True, "documents": ["doc_a"]}
+        health = client.get("/health").json()
+        assert health["ok"] is True
+        assert health["documents"] == ["doc_a"]
+        # Records are counted too, so a restart that lost the store is visible.
+        assert isinstance(health["records"], int)
 
 
 class TestUpload:

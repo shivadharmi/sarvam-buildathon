@@ -35,7 +35,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import Field
 
-from . import cache, jobs, starters, voice
+from . import cache, jobs, records, starters, voice
 from .config import SUPPORTED_LANGUAGES
 from .jobs import Job, JobState, Stage
 from .models import (
@@ -59,10 +59,19 @@ app.add_middleware(
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
+    # Custom response headers are invisible to browser JS unless named here --
+    # `allow_headers` covers the request side only. Without this the share id
+    # arrives and is silently unreadable.
+    expose_headers=["X-Record-Id"],
 )
 
 NO_SUCH_DOCUMENT = "I don't have that document. Upload the page, or pick one from the list."
 NO_SUCH_JOB = "That upload is no longer being tracked. Upload the page again."
+NO_SUCH_RECORD = "That link doesn't point to an answer I have. It may have been made on another machine."
+RECORD_STALE = (
+    "This page has been read again since that answer was saved, so the saved lines "
+    "no longer match it. Ask the question again to get a current answer."
+)
 ORIGINAL_GONE = (
     "I no longer have the original file for this document, so I can't re-read it. "
     "Upload the page again."
@@ -282,8 +291,46 @@ def get_starters(doc_id: str) -> list[StarterQuestion]:
     return list(starters.generate(_require(doc_id)))
 
 
+class SharedRecord(Frozen):
+    """A stored answer, plus everything needed to check it.
+
+    The document travels with the record because the point of a share link is
+    that the recipient can *verify*, not just read. A citation without the page
+    it came from is the screenshot this product exists to replace.
+    """
+
+    record_id: str
+    record: AnswerRecord
+    document: DigitisedDoc
+
+
+@app.get("/records/{record_id}", response_model=SharedRecord)
+def get_record(record_id: str) -> SharedRecord:
+    """Open a shared answer record.
+
+    The citation is re-sliced from the document on the way out rather than
+    trusted from storage, so a shared link proves the same thing the live
+    screen did. If the stored offsets no longer resolve, the record is gone
+    rather than approximate.
+    """
+    stored = records.load(record_id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail=NO_SUCH_RECORD)
+
+    doc = _require(stored.doc_id)
+
+    if stored.quote_start is not None and stored.quote_end is not None:
+        if doc.text[stored.quote_start : stored.quote_end] != stored.quote:
+            # The page was re-digitised under the same id and the offsets no
+            # longer mean what they meant. Showing the old quote against the
+            # new page would be exactly the mismatch we refuse to ship.
+            raise HTTPException(status_code=409, detail=RECORD_STALE)
+
+    return SharedRecord(record_id=record_id, record=stored, document=doc)
+
+
 @app.post("/ask", response_model=AnswerRecord | NoteAcknowledgement)
-def ask_question(request: AskRequest) -> AnswerRecord | NoteAcknowledgement:
+def ask_question(request: AskRequest, response: Response) -> AnswerRecord | NoteAcknowledgement:
     """Answer a question about one document, or honestly decline.
 
     A failure to reach the model is reported as an error, never as
@@ -293,7 +340,7 @@ def ask_question(request: AskRequest) -> AnswerRecord | NoteAcknowledgement:
     doc = _require(request.doc_id)
 
     try:
-        return handle(
+        result = handle(
             doc,
             request.question,
             history=request.history,
@@ -308,6 +355,12 @@ def ask_question(request: AskRequest) -> AnswerRecord | NoteAcknowledgement:
             status_code=502,
             detail=f"Could not reach the model, so this question was not checked. {exc}",
         ) from exc
+
+    # Every answer is stored, refusals included. "This page doesn't say" is a
+    # result worth sharing -- often the most useful one a reader can forward.
+    if isinstance(result, AnswerRecord):
+        response.headers["X-Record-Id"] = records.save(result)
+    return result
 
 
 class Transcript(Frozen):
@@ -429,4 +482,8 @@ def speak(request: SpeakRequest) -> Speech:
 
 @app.get("/health")
 def health() -> dict[str, object]:
-    return {"ok": True, "documents": [d.doc_id for d in list_documents()]}
+    return {
+        "ok": True,
+        "documents": [d.doc_id for d in list_documents()],
+        "records": records.count(),
+    }

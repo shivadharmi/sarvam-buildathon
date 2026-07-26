@@ -52,7 +52,8 @@ Run it from a **fresh browser reload**. That is a complete reset: the backend st
 | **1:05–1:35** | Ask the starter marked *not on this page* | "It doesn't say. That's the feature — it would rather refuse than guess. And it refuses *only* when the page genuinely doesn't answer. We shipped three checks that refused for other reasons, measured each one, and deleted all three." |
 | **1:35–2:10** | Switch to **doc_b — Telugu.** Ask the vacancies question → correct refusal. Add the note *"I'm applying to the Maldakal project."* Ask again → **cited answer, line 17** | "Second document, second language, no code changes. And the note didn't supply the answer — the page always had it. It supplied the missing *referent*: which project is mine." |
 | **2:10–2:40** | Press **"The page"** on the citation | "That's Bulbul reading the line — and it's the *page's* words, not the model's. Two separate buttons, because heard rather than seen you can't tell them apart, and that difference is the whole product." |
-| **2:40–3:00** | Close on the invariant | "The model never types the quote. It points at line numbers, we verify the range, and we slice the citation out of our own digitised copy. Paraphrase isn't caught — it's impossible." |
+| **2:40–2:50** | Hit **Copy link to this answer**, open it in a new tab | "That's the artifact — the answer, the page, and the citation re-checked against it when the link opened. Not a screenshot. Anyone can verify it." |
+| **2:50–3:00** | Close on the invariant | "The model never types the quote. It points at line numbers, we verify the range, and we slice the citation out of our own digitised copy. Paraphrase isn't caught — it's impossible." |
 
 ## If the API dies mid-demo
 
@@ -68,3 +69,4 @@ Run it from a **fresh browser reload**. That is a complete reset: the backend st
 - [ ] Mic permission already granted (do this before you start, not on camera)
 - [ ] Sound on and audible on the shared screen
 - [ ] Decide whether the extra uploaded Telugu doc stays in the list or goes
+- [ ] Share links are `localhost` — fine over screen-share, dead if anyone clicks one from the recording

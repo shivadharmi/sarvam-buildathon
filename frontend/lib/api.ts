@@ -9,6 +9,7 @@ import type {
   JobStatus,
   Speech,
   SpeechSource,
+  SharedRecord,
   ThreadItem,
   Transcript,
   Turn,
@@ -61,7 +62,17 @@ function messageFrom(body: string, status: number): string {
   return trimmed;
 }
 
+/** A parsed body plus the response, for the few calls that read a header. */
+async function requestWith<T>(path: string, init?: RequestInit) {
+  const response = await rawRequest(path, init);
+  return { body: (await response.json()) as T, response };
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return (await requestWith<T>(path, init)).body;
+}
+
+async function rawRequest(path: string, init?: RequestInit): Promise<Response> {
   // The browser has to set multipart's boundary itself, so an explicit
   // Content-Type on a FormData body would make the upload unparseable.
   const isForm = typeof FormData !== "undefined" && init?.body instanceof FormData;
@@ -86,7 +97,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(messageFrom(body, response.status), response.status);
   }
 
-  return (await response.json()) as T;
+  return response;
 }
 
 export function getDocument(docId: string): Promise<DigitisedDoc> {
@@ -111,15 +122,24 @@ interface AskOptions {
  * It holds no session state, so everything needed to understand a follow-up
  * travels with the request. Reloading the page is a complete, reliable reset.
  */
-export function ask(
+export async function ask(
   docId: string,
   question: string,
   { history = [], corrections = [] }: AskOptions = {},
 ): Promise<ThreadItem> {
-  return request<ThreadItem>("/ask", {
+  const { body, response } = await requestWith<ThreadItem>("/ask", {
     method: "POST",
     body: JSON.stringify({ doc_id: docId, question, history, corrections }),
   });
+  // The backend stores every answer and names it in a header, so the record
+  // can be shared without a second round trip.
+  const recordId = response.headers.get("X-Record-Id");
+  return body.kind === "answer" && recordId ? { ...body, record_id: recordId } : body;
+}
+
+/** Open a shared answer record, with the page needed to check it. */
+export function getRecord(recordId: string): Promise<SharedRecord> {
+  return request<SharedRecord>(`/records/${encodeURIComponent(recordId)}`);
 }
 
 /**

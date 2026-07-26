@@ -67,6 +67,14 @@ export interface AnswerRecord {
   model: string;
   asked_at: string;
 
+  /**
+   * Set once the answer has been stored, so it can be shared.
+   *
+   * Client-side only — it arrives on a response header, not in the body, and
+   * is never sent back. A shared record is immutable; this just names it.
+   */
+  record_id?: string;
+
   /** What the model claimed before verification ruled. Powers the honesty beat. */
   model_claimed_found: boolean;
   model_claimed_quote: string | null;
@@ -256,4 +264,17 @@ export function isJobTerminal(job: JobStatus): boolean {
 /** The model asserted a source quote and the gate refused it. */
 export function wasOverruled(record: AnswerRecord): boolean {
   return record.status === "not_stated" && record.model_claimed_found;
+}
+
+/**
+ * A shared answer, with the page needed to check it.
+ *
+ * The document travels with the record on purpose: the point of a share link
+ * is that the recipient can *verify*, not just read. A citation without its
+ * source is the screenshot this product exists to replace.
+ */
+export interface SharedRecord {
+  record_id: string;
+  record: AnswerRecord;
+  document: DigitisedDoc;
 }
