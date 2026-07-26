@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+/*
+  Palette derived from the artifact itself: Indian official paper photocopies
+  cool grey (not warm cream), duplicating ink is violet, and seals are red.
+  Red is reserved exclusively for refusals -- it never appears decoratively,
+  so when it does appear it means exactly one thing.
+*/
+:root {
+  --paper: #f4f3ee;
+  --surface: #fbfaf7;
+  --ink: #14141a;
+  --muted: #5f5f6b;
+  --faint: #8b8b95;
+  --duplicator: #4438a8;
+  --duplicator-wash: #4438a81f;
+  --duplicator-edge: #4438a840;
+  --seal: #c4102e;
+  --seal-wash: #c4102e14;
+  --rule: #c9c7be;
+  --rule-soft: #dedcd4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #131317;
+    --surface: #1b1b21;
+    --ink: #ecebe4;
+    --muted: #9a9aa6;
+    --faint: #6c6c78;
+    --duplicator: #a99cff;
+    --duplicator-wash: #a99cff24;
+    --duplicator-edge: #a99cff59;
+    --seal: #ff7a8f;
+    --seal-wash: #ff7a8f1a;
+    --rule: #34343d;
+    --rule-soft: #26262d;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-duplicator: var(--duplicator);
+  --color-duplicator-wash: var(--duplicator-wash);
+  --color-duplicator-edge: var(--duplicator-edge);
+  --color-seal: var(--seal);
+  --color-seal-wash: var(--seal-wash);
+  --color-rule: var(--rule);
+  --color-rule-soft: var(--rule-soft);
+
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", monospace;
+  --font-indic: var(--font-noto-tamil), var(--font-noto-telugu),
+    "Noto Sans Tamil", "Noto Sans Telugu", sans-serif;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+/* Region labels. Tracking does the work; no boxes, no icons. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/*
+  The citation highlight: a left rule plus a wash, not a marker-pen block.
+  Reads as annotated statute text, which is the register of trust this
+  product is trying to earn.
+*/
+.cited-line {
+  background: var(--duplicator-wash);
+  box-shadow: inset 2px 0 0 0 var(--duplicator);
+}
+
+.cited-line-first {
+  animation: settle 420ms ease-out;
+}
+
+@keyframes settle {
+  from {
+    background: var(--duplicator-edge);
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--duplicator);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

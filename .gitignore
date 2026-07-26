@@ -1,0 +1,30 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Node / Next ---
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# --- secrets: never commit ---
+.env
+.env.*
+!.env.example
+
+# --- reader-supplied documents ---
+# Uploads are other people's paperwork. The originals and their digitised
+# cache stay local; the two demo documents (doc_a/doc_b) are committed on
+# purpose, because they are the offline fallback for a dead API.
+backend/uploads/
+backend/cache/up_*.json
+backend/cache/*.starters.json
+
+# --- tooling artifacts ---
+.playwright-mcp/
+.DS_Store

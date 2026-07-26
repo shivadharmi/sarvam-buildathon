@@ -1,0 +1,21 @@
+[project]
+name = "askdoc"
+version = "0.1.0"
+description = "Ask-the-Document: a trustworthy reader for dense Tamil/Telugu official pages"
+requires-python = ">=3.12"
+dependencies = [
+    "sarvamai",
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["askdoc"]

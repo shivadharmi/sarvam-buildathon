@@ -1,0 +1,20 @@
+{
+  "enabledMcpjsonServers": ["sarvam"],
+  "permissions": {
+    "defaultMode": "auto",
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(pytest:*)",
+      "WebFetch(domain:docs.sarvam.ai)",
+      "WebFetch(domain:dashboard.sarvam.ai)",
+      "mcp__docs-sarvam-ai__searchDocs"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)"
+    ]
+  }
+}
