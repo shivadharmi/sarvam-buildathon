@@ -26,9 +26,19 @@ interface DocumentHeaderProps {
   doc: DigitisedDoc | null;
   onChooseLanguage: (docId: string, language: string) => void;
   busy?: boolean;
+  /** Progress while the page is being read again. */
+  status?: string | null;
+  /** Why a re-read did not happen, in the server's words. */
+  error?: string | null;
 }
 
-export function DocumentHeader({ doc, onChooseLanguage, busy }: DocumentHeaderProps) {
+export function DocumentHeader({
+  doc,
+  onChooseLanguage,
+  busy,
+  status,
+  error,
+}: DocumentHeaderProps) {
   const [correcting, setCorrecting] = useState(false);
 
   if (!doc) {
@@ -84,6 +94,21 @@ export function DocumentHeader({ doc, onChooseLanguage, busy }: DocumentHeaderPr
             new reading has its own line numbers.
           </p>
         </div>
+      )}
+
+      {status && (
+        <p className="mt-2 text-xs text-muted" aria-live="polite">
+          {status}
+        </p>
+      )}
+
+      {error && (
+        <p
+          role="alert"
+          className="mt-2 border-l-2 border-seal bg-seal-wash px-3 py-2 text-xs leading-relaxed text-seal"
+        >
+          {error}
+        </p>
       )}
     </div>
   );

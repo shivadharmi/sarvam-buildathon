@@ -40,8 +40,23 @@ def _path_for(doc_id: str) -> Path:
     return CACHE_DIR / f"{_check_doc_id(doc_id)}.json"
 
 
+# Sidecars live in their own directory rather than beside the documents as
+# `<doc_id>.starters.json`. They were neighbours once, and `list_cached` --
+# which globs `*.json` -- promptly tried to parse a starters file as a
+# DigitisedDoc and brought down the document list as soon as any starters were
+# generated. Filtering the glob would have fixed that instance; a subdirectory
+# makes the whole class unreachable, so the next sidecar we add cannot
+# reintroduce it. glob() does not recurse, so documents stay a clean listing.
+#
+# Derived per call rather than as a module constant: the tests rebind
+# CACHE_DIR, and a constant computed at import would keep pointing at the real
+# cache and write test fixtures into it.
+def _starters_dir() -> Path:
+    return CACHE_DIR / "starters"
+
+
 def _starters_path_for(doc_id: str) -> Path:
-    return CACHE_DIR / f"{_check_doc_id(doc_id)}.starters.json"
+    return _starters_dir() / f"{_check_doc_id(doc_id)}.json"
 
 
 def save(doc: DigitisedDoc) -> Path:
@@ -81,7 +96,7 @@ def save_starters(doc_id: str, questions: tuple[StarterQuestion, ...]) -> Path:
     digitisation artifact and rewriting it to attach suggestions would churn
     the very thing every citation offset indexes into.
     """
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    _starters_dir().mkdir(parents=True, exist_ok=True)
     path = _starters_path_for(doc_id)
     payload = [q.model_dump() for q in questions]
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

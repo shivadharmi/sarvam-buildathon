@@ -42,11 +42,16 @@ def _load(doc_id: str, *, force: bool = False):
     spec = DOCUMENTS.get(doc_id)
     if spec is None:
         sys.exit(f"Unknown doc {doc_id!r}. Known: {', '.join(DOCUMENTS)}")
+    # The label has always been in DOCUMENTS and never reached the record, so
+    # the two demo documents arrived at the UI nameless while uploads carried
+    # their filename. Harmless in the console, visible the moment they sit in a
+    # library beside uploaded pages.
     return digitise(
         DOCS_DIR / spec["file"],
         language=spec["language"],
         doc_id=doc_id,
         force=force,
+        label=spec["label"],
     )
 
 

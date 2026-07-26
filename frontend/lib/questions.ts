@@ -13,7 +13,6 @@
  */
 
 import { getStarters } from "./api";
-import { languageName } from "./languages";
 import type { DigitisedDoc } from "./types";
 
 export interface StarterQuestion {
@@ -97,29 +96,13 @@ export const DOCUMENT_LABELS: Record<string, { name: string; script: string }> =
   doc_b: { name: "Anganwadi recruitment notice", script: "Telugu" },
 };
 
-const CHIP_LENGTH = 16;
-
-/** Drop the extension: ".pdf" on a chip says nothing the reader needs. */
-function withoutExtension(filename: string): string {
-  return filename.replace(/\.[a-z0-9]+$/i, "");
-}
-
 /**
- * The short name on a switcher chip.
+ * What to call a document.
  *
- * An upload is named by the file the reader handed over — two Tamil pages must
- * be told apart, and "Tamil" twice cannot do that.
+ * The demo pages have hand-written names. An upload is named by the file the
+ * reader handed over — two Tamil pages have to be told apart, and "Tamil"
+ * twice cannot do that. Failing all else, the id, which is at least true.
  */
-export function shortLabel(doc: DigitisedDoc): string {
-  const builtin = DOCUMENT_LABELS[doc.doc_id];
-  if (builtin) return builtin.script;
-
-  const named = withoutExtension(doc.label || doc.source_filename || "").trim();
-  if (!named) return languageName(doc.language);
-  return named.length > CHIP_LENGTH ? `${named.slice(0, CHIP_LENGTH)}…` : named;
-}
-
-/** The full name, for the document header and chip tooltips. */
 export function fullName(doc: DigitisedDoc): string {
   return (
     DOCUMENT_LABELS[doc.doc_id]?.name || doc.label || doc.source_filename || doc.doc_id

@@ -23,7 +23,7 @@ out/
 # purpose, because they are the offline fallback for a dead API.
 backend/uploads/
 backend/cache/up_*.json
-backend/cache/*.starters.json
+backend/cache/starters/
 
 # --- tooling artifacts ---
 .playwright-mcp/

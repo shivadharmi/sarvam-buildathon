@@ -23,7 +23,7 @@ from .config import (
     DIGITISE_TIMEOUT_S,
     api_key,
 )
-from .models import DigitisedDoc
+from .models import DigitisedDoc, DocOrigin, LanguageSource
 
 # Anything other than these two means the output is incomplete or absent.
 # PartiallyCompleted is explicitly NOT success.
@@ -76,13 +76,28 @@ def digitise(
     language: str,
     doc_id: str,
     force: bool = False,
+    persist: bool = True,
+    origin: DocOrigin = DocOrigin.BUILTIN,
+    label: str = "",
+    language_source: LanguageSource = LanguageSource.BUILTIN,
+    probe_language: str = "",
 ) -> DigitisedDoc:
     """Digitise a page and cache it. Returns the cached copy when one exists.
 
     `force=True` re-runs against the live API, which costs money -- reserve it
     for when the cached text is genuinely wrong.
+
+    `persist=False` neither reads nor writes the cache. That is for the
+    ingestion probe pass, which reads a page in a language we have only guessed
+    at: it is a paid call worth keeping in hand, but not a document, and
+    caching it would put text we already suspect is garbled in the library
+    under the same name the real reading will want.
+
+    The provenance arguments are passed straight through to `cache.build_doc`.
+    They record how this document arrived and how its language was decided --
+    a reader who can see we guessed can correct us.
     """
-    if not force:
+    if not force and persist:
         cached = cache.load(doc_id)
         if cached is not None:
             return cached
@@ -117,10 +132,18 @@ def digitise(
         raw_blocks=raw_blocks,
         source_filename=source.name,
         page_count=page_count,
+        origin=origin,
+        label=label,
+        language_source=language_source,
+        probe_language=probe_language,
     )
 
     if not doc.text.strip():
+        # Raised rather than cached. A document with no text answers "not
+        # stated" to everything the page states, which is exactly the
+        # dishonesty this product exists to prevent.
         raise DigitisationError("Digitisation produced empty text.")
 
-    cache.save(doc)
+    if persist:
+        cache.save(doc)
     return doc

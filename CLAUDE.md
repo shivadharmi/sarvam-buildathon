@@ -103,6 +103,42 @@ Order matters; everything downstream indexes into the result.
 
 Both are deterministic, content-preserving normalisations of *our own* text. They do not weaken the invariant: the model still cannot author a citation.
 
+### Uploaded documents — the language chicken-and-egg
+
+Any PDF/PNG/JPEG page can be uploaded. Digitisation has **no auto-detect** — `language` is mandatory and there is no `auto` value — so detection needs text, text needs digitisation, and digitisation needs the language. Broken with a probe pass:
+
+```
+validate → sha256 → doc_id "up_<hash16>"   ← cache hit stops here, no paid call
+        → PASS 1 digitise with config.PROBE_LANGUAGE
+        → sample ≤1000 chars from the LONGEST block
+        → /text-lid → {language_code, script_code}
+        → verify against our own Unicode-block count
+        → PASS 2 with the resolved language (skipped iff == probe)
+```
+
+**`/text-lid` proposes; our own script count disposes.** LID knows 11 languages, digitisation accepts 23, and LID answers with one of its 11 rather than admitting ignorance. So `detect.resolve_language` checks strongest-evidence-first — orthographic, then ambiguous-script, then LID agreement, then script:
+
+| Evidence | Resolution | `language_source` |
+|---|---|---|
+| Distinctive letters (`ৰ`/`ৱ` → Assamese, not Bengali) | character evidence wins | `script` |
+| Ambiguous script (Deva, Arab) + LID names a language actually written in it | accept LID | `detected` |
+| Ambiguous script + LID names something else, or is down | **ask the reader** | `user` |
+| Unambiguous script | script → language | `script` |
+
+Character evidence outranks LID **deliberately**: LID has no Assamese and answers `bn-IN` for an Assamese page, so letting agreement win would launder a wrong answer as a corroborated one. The same check refuses Arabic + `hi-IN`, which is LID's real behaviour on an Urdu page.
+
+**A wrong language hint degrades OCR, it cannot forge a citation** — the quote is still sliced from our own stored text at a verified line range. The new failure mode is a verbatim quote of garbled text: a legibility problem, not an honesty breach.
+
+⚠️ **`PROBE_LANGUAGE` rests on an unmeasured assumption:** that the digitiser returns correctly-scripted text when the hint is *wrong*. If a Tamil page probed as `hi-IN` comes back as Devanagari or noise, there is nothing to detect from. Detection is isolated behind `resolve_language` so that failure costs one constant, not a redesign. **Spike this before trusting it.**
+
+**Known limitation, be honest about it:** Manipuri is commonly written in Bengali script, so a Bengali-script Manipuri page reads as Bengali. There is no orthographic discriminator we could verify, and routing `Beng` through LID does not help — LID has no Manipuri either and answers `bn-IN`. The reader's language override is the mitigation.
+
+**Validation runs before any paid call** (`upload.py`). Type comes from magic bytes, never the extension or the browser's `Content-Type`. Size is enforced *while streaming* with a mid-write abort, so a large upload cannot buffer into memory before being measured; `Content-Length` may refuse early but never admit. Over-limit page counts are **rejected, not truncated** — a "not stated" that means "not stated in the part I read" is a different and dishonest claim.
+
+**The job registry is in-memory, and that does not violate "the backend stores nothing between requests."** That invariant is about *session* state — history, corrections, what you asked. A job is transient plumbing for one upload; completed documents live on disk. A restart loses in-flight uploads and nothing else.
+
+**A corrupt document file is loud, never skipped.** `GET /documents` lets the parse error propagate rather than quietly omitting the file. A document that vanishes from the list without a word is the same shape as "this page doesn't say" about a page that says it plainly — a confident false claim about absence. Pinned by `test_a_corrupt_document_is_loud_rather_than_missing`.
+
 ### One input box — question or statement
 
 `POST /ask` returns a **discriminated union**: `AnswerRecord` (`kind: "answer"`) or `NoteAcknowledgement` (`kind: "note"`). `pipeline.handle` routes on `intent.classify`.
@@ -113,7 +149,11 @@ Both are deterministic, content-preserving normalisations of *our own* text. The
 
 ### Session context — multi-turn and corrections
 
-`AskRequest` carries `history` and `corrections`; **the backend stores nothing between requests.** Reloading the page is therefore a complete, reliable reset (this matters for M5).
+`AskRequest` carries `history` and `corrections`; **the backend stores nothing between requests.** Reloading is therefore a complete, reliable reset (this matters for M5).
+
+⚠️ **What "reload resets" means changed with the route split.** The UI is now two pages: `/` (library + upload) and `/doc/[docId]` (reader). Reloading the reader keeps the *document* — it is addressable, not stateful — and still drops history and corrections. `lib/useConversation.ts` holds them in plain `useState` with **no persistence layer at all**; the retired `localStorage` conversation store was deleted, not merely unread, because persisted chats and "reload is a complete reset" cannot both be true. Resuming an old chat is gone with it; closing the tab loses the thread.
+
+**Switching documents resets the conversation structurally, not by hand.** Two documents are two routes that never share a store. Note that Next reuses the reader component when only the param changes, so `useConversation` resets *during render* on `docId` change — an effect would paint one frame of doc A's answers against doc B's text. Re-digitising keeps the same id, so it calls `reload()` + `startOver()` explicitly: a new reading has new line numbers, and old citations would point nowhere.
 
 - **History is replayed as a real multi-turn conversation** — alternating `user`/`assistant` messages via `prompts.build_messages`, not flattened into prose inside one user turn. Assistant turns are reconstructed from the *verified* record, so a refusal replays as `found: false`.
 - ⚠️ **The follow-up rule is conditional on `history` being non-empty.** Including it on first-turn questions cost **8 points of accuracy** (96% → 88%). Rules about a conversation that isn't happening dilute the ones that matter. Two tests pin this.
@@ -205,7 +245,17 @@ uv venv --python 3.12 && uv pip install -U sarvamai fastapi "uvicorn[standard]" 
 .venv/bin/python -m askdoc.cli show     --doc doc_a # print cached digitised text
 .venv/bin/python -m askdoc.cli ask      --doc doc_a "question" ["question2" ...]
 
+# --- HTTP API ---
+# POST /documents                    multipart, field "file" -> 202 {job_id}
+#                                    cache hit -> 200 {job_id, doc_id, state:"ready"}
+# GET  /jobs/{job_id}                state is authoritative; doc_id ALWAYS present
+# GET  /documents                    full DigitisedDoc incl. text, newest first
+# GET  /documents/{doc_id}           |  POST /documents/{doc_id}/language {"language"}
+# GET  /documents/{doc_id}/starters  generated once, [] is a valid 200
+
 # --- frontend (Next.js 16, TS, Tailwind) ---
+# /              library + upload (ingestion waits here; failures handled here)
+# /doc/[docId]   reader — one document, always
 cd frontend && npm run dev                          # expects backend at NEXT_PUBLIC_API_BASE
 ```
 

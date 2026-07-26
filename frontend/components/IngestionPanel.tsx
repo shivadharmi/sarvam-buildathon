@@ -9,7 +9,13 @@ interface IngestionPanelProps {
 }
 
 /**
- * The strip that appears while a page of the reader's own is being taken in.
+ * Taking in a page of the reader's own — the dropzone and everything that
+ * happens to what lands in it.
+ *
+ * It lives on the library, and so does every answer about the file: the
+ * stages, a rejection, a language we could not work out, a failure. Nothing
+ * navigates to a reader until there is a document to read, so a failed job
+ * never strands anyone on a page with nothing on it.
  *
  * It narrates the passes rather than spinning: the file is read once to find
  * out what language it is in, then read again in that language, and a reader
@@ -29,8 +35,8 @@ export function IngestionPanel({ ingestion }: IngestionPanelProps) {
   const failure = error && !rejection ? error : null;
 
   return (
-    <div className="shrink-0 border-b border-rule px-6 py-4">
-      <div className="max-w-[38rem]">
+    <div className="max-w-[34rem]">
+      <div>
         {showDropzone && (
           <UploadDropzone onFile={ingestion.upload} disabled={busy} error={rejection} />
         )}

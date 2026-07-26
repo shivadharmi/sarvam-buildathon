@@ -174,7 +174,9 @@ class TestFailureIsAlwaysSilent:
         assert calls == []
 
     def test_an_unreadable_cache_file_yields_no_starters(self, doc, stub_model, tmp_path):
-        (tmp_path / f"{doc.doc_id}.starters.json").write_text("{ truncated", encoding="utf-8")
+        starters_dir = tmp_path / "starters"
+        starters_dir.mkdir(exist_ok=True)
+        (starters_dir / f"{doc.doc_id}.json").write_text("{ truncated", encoding="utf-8")
         stub_model({"questions": MODEL_WRITTEN})
         assert starters.generate(doc) == ()
 
