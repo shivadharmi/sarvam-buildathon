@@ -4,12 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-**There is no source code yet.** The repo currently contains two planning docs and nothing else. It is not a git repository.
+**Shipped and working.** Python backend (`backend/askdoc`, FastAPI) + Next.js frontend (`frontend`), git repo on `main`. 373 tests pass; measured 92% on the labelled set. Voice in and out. Both demo documents cached to disk.
 
 - `IDEA_SCOPE_1.md` — the control plane. Read it before proposing or making any change. It owns product scope, milestones (M0–M5), acceptance tests, non-goals, and the parking lot.
 - `SOURCE_DOCS.md` — the two demo input documents (Doc A Tamil / Doc B Telugu) and their in-scope + out-of-scope demo questions.
+- `SUBMISSION.md` — submission assets and the timed demo script.
 
-**Update the "Commands" section below the moment a scaffold lands.** Do not let it stay aspirational.
+⚠️ **The backend must run with `uvicorn --reload`** or prompt edits will not take effect and you will debug the wrong code.
 
 ## What this is
 
@@ -24,7 +25,7 @@ Built solo under a hard time box: Sarvam Epoch Buildathon, Sun 26 Jul, build 10:
 1. Digitise the page (Sarvam Vision) → digitised text, NFC-normalised once, cached.
 2. Render it with **line numbers** (`lines.render_numbered`).
 3. Ask `sarvam-105b` for `{answer, found, quote_from_line, quote_to_line, supporting_quote}` — the model **points at lines**, it does not retype the quote.
-4. Deterministically verify the range: in bounds, not inverted, not blank, **≤ 8 lines** (`lines.MAX_QUOTE_LINES`).
+4. Deterministically verify the range: **in bounds, not inverted, not blank.** Width is measured and labelled, never refused — see the span-cap section below.
 5. Slice those lines out of our text — that is the citation.
 6. Range invalid → *"not stated in this document."*
 
@@ -96,7 +97,7 @@ Pipeline, single document at a time, no corpus and no RAG:
 Tamil/Telugu page (PDF/PNG/JPG)
   → Sarvam Document Digitization (async job)   ← the scored capability
   → digitised text (cached to disk)
-  → grounded QA via sarvam-30b (JSON schema output)
+  → grounded QA via sarvam-105b (JSON schema output, tool-call fallback)
   → verbatim faithfulness gate  ← the core invariant
   → answer record: question · answer · highlighted quote · "not stated" state
 ```
@@ -220,11 +221,11 @@ job.download_output("output.zip")
 
 **Grounded QA** — `POST /v1/chat/completions`:
 
-- Models: **`sarvam-30b`** (default choice here) or `sarvam-105b`. `sarvam-m` is **deprecated** and now errors.
+- Models: **`sarvam-105b`** (the one to use — see the verified-live table below; `sarvam-30b` cannot hold structured output and serves only as a forced-tool-call fallback). `sarvam-m` is **deprecated** and now errors.
 - `temperature=0.0` + fixed `seed`. Note `seed` is best-effort, **not guaranteed** — do not stake demo repeatability on it; stake it on the cached digitised text.
 - `response_format` = `{"type": "json_schema", "json_schema": {"name": ..., "schema": ..., "strict": true}}` to force `{answer, supporting_quote, found}`.
 - **Set `reasoning_effort=None` and keep `max_tokens` generous.** Reasoning is on by default (`sarvam-105b` defaults to `"low"`), and reasoning tokens can consume the whole budget, returning empty structured output. This is the most likely silent failure in the QA step.
-- **Do not pass `wiki_grounding`** — no longer supported on `sarvam-30b`/`sarvam-105b`. Groundedness comes from the prompt plus the string-match gate, not from this flag.
+- **Do not pass `wiki_grounding`** — no longer supported on `sarvam-30b`/`sarvam-105b`. Groundedness comes from the prompt plus line-anchored extraction, not from this flag.
 
 ## Corrections to IDEA_SCOPE_1.md §1a
 

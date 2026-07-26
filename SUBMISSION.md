@@ -17,7 +17,7 @@
 | Claim | Basis |
 |---|---|
 | The citation is verbatim | Sliced from our NFC-normalised copy at a verified line range. The model emits **numbers**, never quote text |
-| A refusal is honest about *why* | Four distinct `RefusalReason`s. "The page doesn't say" and "that's more than I can quote" are never the same message |
+| A refusal is honest about *why* | Distinct `RefusalReason`s: "the page doesn't say" and "we couldn't verify a citation" are never the same message. It refuses **only** when the page genuinely doesn't answer — three checks that refused for other reasons were measured and deleted |
 | It works on a second document with no code changes | doc_a Tamil, doc_b Telugu, same pipeline |
 | Measured, not asserted | 12 labelled cases × 3 runs, scored for **correct / irrelevant / false refusal** |
 
@@ -49,7 +49,7 @@ Run it from a **fresh browser reload**. That is a complete reset: the backend st
 |---|---|---|
 | **0:00–0:25** | Open `doc/doc_a` — the Tamil exam notice, 65 numbered lines | "This is a real TNPSC page. If you need one fact out of it, you cannot skim it — and you cannot afford to guess." |
 | **0:25–1:05** | Tap the mic, **ask in Tamil out loud**: *"விடைத்தாளை நிரப்ப எந்த வகையான பேனாவைப் பயன்படுத்த வேண்டும்?"* Let the transcript land in the box, **then** press Ask | "It writes down what it heard and stops. I check it before it's asked — because a misheard question comes back as a perfectly verified answer to something I never said." Answer appears; **line 40 highlights on the page.** |
-| **1:05–1:35** | Ask the starter marked *not on this page* | "It doesn't say. That's the feature. It would rather refuse than guess — and it tells me *why* it refused: the page is silent, not that I hit some limit of its own." |
+| **1:05–1:35** | Ask the starter marked *not on this page* | "It doesn't say. That's the feature — it would rather refuse than guess. And it refuses *only* when the page genuinely doesn't answer. We shipped three checks that refused for other reasons, measured each one, and deleted all three." |
 | **1:35–2:10** | Switch to **doc_b — Telugu.** Ask the vacancies question → correct refusal. Add the note *"I'm applying to the Maldakal project."* Ask again → **cited answer, line 17** | "Second document, second language, no code changes. And the note didn't supply the answer — the page always had it. It supplied the missing *referent*: which project is mine." |
 | **2:10–2:40** | Press **"The page"** on the citation | "That's Bulbul reading the line — and it's the *page's* words, not the model's. Two separate buttons, because heard rather than seen you can't tell them apart, and that difference is the whole product." |
 | **2:40–3:00** | Close on the invariant | "The model never types the quote. It points at line numbers, we verify the range, and we slice the citation out of our own digitised copy. Paraphrase isn't caught — it's impossible." |
