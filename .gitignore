@@ -28,3 +28,7 @@ backend/cache/starters/
 # --- tooling artifacts ---
 .playwright-mcp/
 .DS_Store
+
+# Playwright/dev screenshots
+voice-controls.png
+.playwright-mcp/

@@ -14,7 +14,17 @@ What still gets verified, deterministically:
 
 * the range is within the document
 * it is not inverted or empty
-* it is short enough to be actual evidence (see MAX_QUOTE_LINES)
+
+Width is **measured and reported, never refused**. A wide citation was once
+rejected outright, on the reasoning that citing everything proves nothing.
+That reasoning is sound about *evidence* and wrong about *what to do*: breadth
+makes a citation weaker, not false, and refusing threw away a correct, fully
+verified answer to prevent a merely unimpressive one. It is the same mistake
+as the substring gate and the relevance judge, both reverted for the same
+reason -- a check that destroys correct answers costs more than it saves.
+
+The reader is told how much of the page a citation covers and decides for
+themselves. See `broad_above`.
 
 And `gate.check_quote` is still used, on the model's optional self-reported
 quote, purely to surface when it cited something other than what it pointed at.
@@ -25,25 +35,21 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-# A citation must be a *part* of the page, not the page. Without a cap the
-# model could point at every line, satisfy every check, and prove nothing.
+# How wide a citation gets before it is worth telling the reader it is wide.
 #
-# The cap is proportional rather than fixed. A flat 8 lines was a crude proxy
-# for "part, not whole": it refused a legitimate 15-line answer to "help me
-# understand this notification" -- which is probably the most common thing a
-# real reader asks of a dense official page. A quarter of the page is still
-# unmistakably a part of it, while "cite everything" remains impossible.
-MIN_QUOTE_LINES = 8
-MAX_QUOTE_LINES = 30
-QUOTE_SHARE = 0.25
+# ⚠️ This is a LABEL, not a limit. It used to be a cap that refused the answer,
+# and refusing was the wrong response to it -- see `broad` below.
+BROAD_MIN_LINES = 8
+BROAD_MAX_LINES = 30
+BROAD_SHARE = 0.25
 
 SEPARATOR = " | "
 
 
-def max_quote_lines(total_lines: int) -> int:
-    """How many lines a single citation may span for a document this long."""
-    proportional = math.ceil(total_lines * QUOTE_SHARE)
-    return max(MIN_QUOTE_LINES, min(MAX_QUOTE_LINES, proportional))
+def broad_above(total_lines: int) -> int:
+    """Beyond this many lines, a citation is a large part of a page this long."""
+    proportional = math.ceil(total_lines * BROAD_SHARE)
+    return max(BROAD_MIN_LINES, min(BROAD_MAX_LINES, proportional))
 
 
 @dataclass(frozen=True)
@@ -55,10 +61,11 @@ class LineSpan:
     end: int | None = None
     text: str | None = None
     reason: str | None = None
-    #: True when the range was refused because it was wider than we allow --
-    #: a limit of ours, NOT the document being silent. The two must never be
-    #: reported to the reader as the same thing.
-    too_broad: bool = False
+    #: How many lines the citation covers, and whether that is a large part of
+    #: this page. Shown to the reader, never used to refuse them -- breadth
+    #: makes a citation weaker evidence, not false evidence.
+    line_count: int = 0
+    broad: bool = False
 
 
 def _line_bounds(text: str) -> list[tuple[int, int]]:
@@ -97,18 +104,6 @@ def extract_lines(text: str, from_line: int, to_line: int) -> LineSpan:
     if from_line > total or to_line > total:
         return LineSpan(False, reason=f"range {from_line}-{to_line} exceeds {total} lines")
 
-    allowed = max_quote_lines(total)
-    if to_line - from_line + 1 > allowed:
-        return LineSpan(
-            False,
-            reason=(
-                f"range {from_line}-{to_line} spans "
-                f"{to_line - from_line + 1} lines; at most {allowed} may be cited "
-                f"from a {total}-line document"
-            ),
-            too_broad=True,
-        )
-
     start = bounds[from_line - 1][0]
     end = bounds[to_line - 1][1]
     span = text[start:end]
@@ -116,4 +111,12 @@ def extract_lines(text: str, from_line: int, to_line: int) -> LineSpan:
     if not span.strip():
         return LineSpan(False, reason=f"lines {from_line}-{to_line} are blank")
 
-    return LineSpan(True, start=start, end=end, text=span)
+    count = to_line - from_line + 1
+    return LineSpan(
+        True,
+        start=start,
+        end=end,
+        text=span,
+        line_count=count,
+        broad=count > broad_above(total),
+    )

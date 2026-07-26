@@ -134,3 +134,42 @@ class TestPipelineRouting:
     def test_an_empty_acknowledgement_still_replies(self, doc, monkeypatch):
         monkeypatch.setattr(pipeline, "classify", lambda _: (False, ""))
         assert pipeline.handle(doc, "a statement").acknowledgement == "Noted."
+
+
+class TestAcknowledgementsAreReceiptsNotAdvice:
+    """A note is acknowledged, never answered with advice.
+
+    Observed live during M5: "I am applying to the Maldakal project" came back
+    as "Submit the eligibility documents." The classifier has not read the page
+    at that point, so any instruction it gives is invented -- and unfounded
+    advice on an official document is exactly what §6 rules out. It also arrives
+    dressed as the product's own voice, which is worse than a wrong answer,
+    because nothing on screen marks it as a guess.
+    """
+
+    def test_the_prompt_forbids_instructions(self):
+        assert "Never tell the reader what to do" in intent.CLASSIFY_PROMPT
+        assert "is invented" in intent.CLASSIFY_PROMPT
+
+    def test_the_prompt_shows_what_a_receipt_looks_like(self):
+        # Asserting the shape positively: a bare prohibition left the model to
+        # guess what to write instead.
+        assert "receipt, not a reply" in intent.CLASSIFY_PROMPT
+        assert "you are applying to the Maldakal project" in intent.CLASSIFY_PROMPT
+
+    def test_the_schema_carries_the_rule_too(self):
+        # The prompt alone was not enough for the quote-language rule either.
+        described = intent.INTENT_SCHEMA["schema"]["properties"]["acknowledgement"]
+        assert "no advice and no instruction" in described["description"]
+
+    def test_the_language_rule_comes_after_the_english_examples(self):
+        """Order is load-bearing, and getting it wrong shipped a regression.
+
+        The shape examples are written in English. With the language rule stated
+        only *before* them, the model copied their language too: a Tamil note
+        came back acknowledged in English. Restating it last fixed all three
+        scripts tested.
+        """
+        prompt = intent.CLASSIFY_PROMPT
+        assert prompt.index("SHAPE only") < prompt.index("SAME LANGUAGE")
+        assert "Tamil in, Tamil out" in prompt

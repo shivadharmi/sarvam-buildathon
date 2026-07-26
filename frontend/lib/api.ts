@@ -7,7 +7,10 @@ import type {
   DigitisedDoc,
   GeneratedStarter,
   JobStatus,
+  Speech,
+  SpeechSource,
   ThreadItem,
+  Transcript,
   Turn,
   UploadAccepted,
 } from "./types";
@@ -153,6 +156,54 @@ export function getStarters(docId: string): Promise<GeneratedStarter[]> {
   return request<GeneratedStarter[]>(
     `/documents/${encodeURIComponent(docId)}/starters`,
   );
+}
+
+/**
+ * Turn a recording into text. Returns the words and nothing else — asking them
+ * is the reader's decision, made after they have seen what we heard.
+ *
+ * `docId` is required because we already know which page is open, so the
+ * recogniser is told the language rather than left to guess it.
+ */
+export async function transcribe(docId: string, audio: Blob, filename: string) {
+  const form = new FormData();
+  form.append("file", audio, filename);
+  form.append("doc_id", docId);
+  const { transcript } = await request<Transcript>("/transcribe", {
+    method: "POST",
+    body: form,
+  });
+  return transcript;
+}
+
+interface SpeakTarget {
+  source: SpeechSource;
+  /** source="quote": offsets into the document, as the record reported them. */
+  quoteStart?: number | null;
+  quoteEnd?: number | null;
+  /** source="answer": the prose on screen. */
+  text?: string;
+}
+
+/**
+ * Read the citation, or the answer, aloud.
+ *
+ * A quote is requested by *offset*, never by text: the backend re-slices it
+ * from its own copy of the page, so nothing here can put words in the
+ * document's mouth. Audio has no visual distinction between the page's words
+ * and the model's, which is exactly why that has to hold on this path too.
+ */
+export function speak(docId: string, target: SpeakTarget): Promise<Speech> {
+  return request<Speech>("/speak", {
+    method: "POST",
+    body: JSON.stringify({
+      doc_id: docId,
+      source: target.source,
+      quote_start: target.quoteStart ?? null,
+      quote_end: target.quoteEnd ?? null,
+      text: target.text ?? "",
+    }),
+  });
 }
 
 export { ApiError };

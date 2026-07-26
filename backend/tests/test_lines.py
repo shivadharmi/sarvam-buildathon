@@ -7,7 +7,7 @@ those two ever drift, the product cites the wrong thing while looking correct.
 
 import pytest
 
-from askdoc.lines import extract_lines, max_quote_lines, render_numbered
+from askdoc.lines import broad_above, extract_lines, render_numbered
 
 SOURCE = (
     "வினாத்தொகுப்பு எண்: 22166409\n"
@@ -58,41 +58,60 @@ class TestRejectsUnusableRanges:
         # Line 3 is empty; citing it proves nothing.
         assert not extract_lines(SOURCE, 3, 3).valid
 
-    def test_span_longer_than_the_cap_is_rejected(self):
-        # Without this, the model could "cite" the entire document -- verbatim,
-        # passing every check, and worthless as evidence.
+
+class TestWidthIsMeasuredNotRefused:
+    """Breadth is a label on the answer, never a reason to withhold it.
+
+    A wide citation used to be rejected outright, on the reasoning that citing
+    everything proves nothing. Sound about *evidence*, wrong about *what to do*:
+    it threw away a correct, fully verified answer to "what is this page about?"
+    -- probably the most common thing anyone asks of a dense official page --
+    in order to avoid an unimpressive citation. Same mistake as the substring
+    gate and the relevance judge, both reverted for the same reason.
+    """
+
+    def test_a_very_wide_span_still_produces_a_citation(self):
         big = "\n".join(f"line {i}" for i in range(1, 101))
-        cap = max_quote_lines(100)
-        span = extract_lines(big, 1, cap + 1)
-        assert not span.valid
-        assert span.too_broad
+        span = extract_lines(big, 1, 90)
+        assert span.valid
+        assert span.text
 
-    def test_span_exactly_at_the_cap_is_allowed(self):
+    def test_citing_the_whole_document_is_allowed_and_flagged(self):
         big = "\n".join(f"line {i}" for i in range(1, 101))
-        assert extract_lines(big, 1, max_quote_lines(100)).valid
+        span = extract_lines(big, 1, 100)
+        assert span.valid
+        assert span.broad
+        assert span.line_count == 100
 
-    def test_citing_the_whole_document_is_always_refused(self):
+    def test_a_tight_span_is_not_flagged(self):
         big = "\n".join(f"line {i}" for i in range(1, 101))
-        assert not extract_lines(big, 1, 100).valid
+        span = extract_lines(big, 4, 6)
+        assert span.valid
+        assert not span.broad
+        assert span.line_count == 3
+
+    def test_a_single_line_counts_as_one(self):
+        assert extract_lines(SOURCE, 1, 1).line_count == 1
 
 
-class TestProportionalCap:
-    """A citation must be a part of the page, not the page."""
+class TestBroadThreshold:
+    """Where "a large part of the page" starts, for a page this long."""
 
     def test_a_short_document_keeps_the_floor(self):
-        assert max_quote_lines(10) == 8
+        assert broad_above(10) == 8
 
-    def test_a_long_document_allows_a_larger_passage(self):
-        # An 86-line notice: a 15-line answer to "help me understand this"
-        # is legitimate evidence, and a fixed 8 would have refused it.
-        assert max_quote_lines(86) >= 15
+    def test_a_long_document_tolerates_a_larger_passage(self):
+        # An 86-line notice: a 15-line answer to "help me understand this" is
+        # an ordinary citation, not a notably wide one.
+        assert broad_above(86) >= 15
 
-    def test_the_cap_never_reaches_the_whole_document(self):
+    def test_the_threshold_never_reaches_the_whole_document(self):
+        # Citing the entire page is always worth telling the reader about.
         for total in (20, 50, 86, 200, 1000):
-            assert max_quote_lines(total) < total
+            assert broad_above(total) < total
 
-    def test_the_cap_is_bounded_for_very_long_documents(self):
-        assert max_quote_lines(10_000) == 30
+    def test_the_threshold_is_bounded_for_very_long_documents(self):
+        assert broad_above(10_000) == 30
 
     def test_rejection_carries_no_offsets(self):
         span = extract_lines(SOURCE, 999, 999)

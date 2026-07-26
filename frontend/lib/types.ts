@@ -16,11 +16,7 @@ export type AnswerStatus = "cited" | "not_stated";
  * ours, and showing them as silence would tell the reader the page lacks
  * something it actually contains. Never collapse these into one message.
  */
-export type RefusalReason =
-  | "document_silent"
-  | "citation_too_broad"
-  | "citation_invalid"
-  | "not_relevant";
+export type RefusalReason = "document_silent" | "citation_invalid" | "not_relevant";
 
 /**
  * The reader told the page something instead of asking it something.
@@ -56,6 +52,17 @@ export interface AnswerRecord {
   /** 1-based inclusive line numbers — what the UI highlights. */
   quote_from_line: number | null;
   quote_to_line: number | null;
+
+  /**
+   * How much of the page the citation covers.
+   *
+   * Breadth used to refuse the answer outright. It doesn't any more: a wide
+   * citation is weaker evidence, not false evidence, and withholding a verified
+   * answer over it told the reader the page was silent about something it
+   * covers at length. Shown, so they can weigh it themselves.
+   */
+  quote_line_count: number;
+  citation_is_broad: boolean;
 
   model: string;
   asked_at: string;
@@ -107,6 +114,36 @@ export function toTurn(record: AnswerRecord): Turn {
 /** A note the reader adds to steer interpretation. Never quotable. */
 export interface Correction {
   note: string;
+}
+
+/**
+ * What the speech recogniser heard.
+ *
+ * Deliberately just text, and deliberately not an answer. A misheard question
+ * would otherwise produce a fully verified citation for something the reader
+ * never asked — correct by every check we run, and still wrong. So this goes
+ * into the input box for them to read before anything is asked.
+ */
+export interface Transcript {
+  transcript: string;
+}
+
+/** Which of the two things on screen to read aloud. */
+export type SpeechSource = "quote" | "answer";
+
+/** Base64 WAV clips, played in order. Long text comes back as several. */
+export interface Speech {
+  audios: string[];
+  language: string;
+  /**
+   * True when the text was longer than the service will read.
+   *
+   * Surfaced, never silent: audio that simply stops is indistinguishable from
+   * a page that simply ends, and letting someone believe they heard the whole
+   * citation when they didn't is the same failure as calling our own limit the
+   * document's silence.
+   */
+  truncated: boolean;
 }
 
 /** Where a document came from. Builtins are the two cached demo pages. */

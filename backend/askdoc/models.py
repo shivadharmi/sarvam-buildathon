@@ -40,9 +40,14 @@ class RefusalReason(str, Enum):
     """
 
     DOCUMENT_SILENT = "document_silent"
-    CITATION_TOO_BROAD = "citation_too_broad"
     CITATION_INVALID = "citation_invalid"
     NOT_RELEVANT = "not_relevant"
+
+    # CITATION_TOO_BROAD used to live here. Breadth no longer refuses anything:
+    # a wide citation is weaker evidence, not false evidence, and rejecting one
+    # threw away a verified answer to a question a real reader actually asks
+    # ("what is this page about?"). It is reported on the answer instead, via
+    # AnswerRecord.citation_is_broad.
 
 
 class DocOrigin(str, Enum):
@@ -187,6 +192,12 @@ class AnswerRecord(Frozen):
     quote_end: int | None = None
     quote_from_line: int | None = None
     quote_to_line: int | None = None
+
+    # How much of the page the citation covers. Shown to the reader so they can
+    # weigh it -- a fifteen-line citation is a real citation and a weak one, and
+    # they are entitled to know which they are looking at. Never a refusal.
+    quote_line_count: int = 0
+    citation_is_broad: bool = False
 
     model: str
     asked_at: str

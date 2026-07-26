@@ -153,6 +153,7 @@ export default function Reader() {
                 if (sent) setQuestion("");
               });
             }}
+            docId={doc.doc_id}
             language={doc.language}
             disabled={locked}
             pending={pending}
