@@ -6,7 +6,15 @@
  * cannot tell a correct refusal from a broken app if you can't read either.
  *
  * Each set deliberately ends with a question the page does NOT answer.
+ *
+ * The two demo documents keep their hand-written sets: they were read by hand
+ * and their unanswerable and needs-a-note cases are known-true, which is not
+ * something a generator can promise. Uploads fetch generated ones instead.
  */
+
+import { getStarters } from "./api";
+import { languageName } from "./languages";
+import type { DigitisedDoc } from "./types";
 
 export interface StarterQuestion {
   text: string;
@@ -88,3 +96,52 @@ export const DOCUMENT_LABELS: Record<string, { name: string; script: string }> =
   doc_a: { name: "TNPSC Group IV exam booklet", script: "Tamil" },
   doc_b: { name: "Anganwadi recruitment notice", script: "Telugu" },
 };
+
+const CHIP_LENGTH = 16;
+
+/** Drop the extension: ".pdf" on a chip says nothing the reader needs. */
+function withoutExtension(filename: string): string {
+  return filename.replace(/\.[a-z0-9]+$/i, "");
+}
+
+/**
+ * The short name on a switcher chip.
+ *
+ * An upload is named by the file the reader handed over — two Tamil pages must
+ * be told apart, and "Tamil" twice cannot do that.
+ */
+export function shortLabel(doc: DigitisedDoc): string {
+  const builtin = DOCUMENT_LABELS[doc.doc_id];
+  if (builtin) return builtin.script;
+
+  const named = withoutExtension(doc.label || doc.source_filename || "").trim();
+  if (!named) return languageName(doc.language);
+  return named.length > CHIP_LENGTH ? `${named.slice(0, CHIP_LENGTH)}…` : named;
+}
+
+/** The full name, for the document header and chip tooltips. */
+export function fullName(doc: DigitisedDoc): string {
+  return (
+    DOCUMENT_LABELS[doc.doc_id]?.name || doc.label || doc.source_filename || doc.doc_id
+  );
+}
+
+/**
+ * Starters for a document: hand-written for the demo pages, generated for
+ * uploads.
+ *
+ * A failure here is never surfaced. Starters are a convenience — the input box
+ * works without them, and an error where a suggestion should be would read as
+ * the page itself being broken.
+ */
+export async function loadStarters(docId: string): Promise<StarterQuestion[]> {
+  const handWritten = STARTER_QUESTIONS[docId];
+  if (handWritten) return handWritten;
+
+  try {
+    const generated = await getStarters(docId);
+    return generated.map((starter) => ({ text: starter.text, gloss: starter.gloss }));
+  } catch {
+    return [];
+  }
+}

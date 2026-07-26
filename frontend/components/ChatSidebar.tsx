@@ -1,10 +1,13 @@
 "use client";
 
 import { answerCount, isEmpty, titleFor, type Conversation } from "@/lib/conversations";
-import { DOCUMENT_LABELS } from "@/lib/questions";
+import { DOCUMENT_LABELS, shortLabel } from "@/lib/questions";
+import type { DigitisedDoc } from "@/lib/types";
 
 interface ChatSidebarProps {
   conversations: Conversation[];
+  /** Only to name each chat's page — an upload has no hand-written label. */
+  documents: DigitisedDoc[];
   activeId: string | null;
   onSelect: (id: string) => void;
   onNew: () => void;
@@ -21,6 +24,7 @@ interface ChatSidebarProps {
  */
 export function ChatSidebar({
   conversations,
+  documents,
   activeId,
   onSelect,
   onNew,
@@ -28,6 +32,13 @@ export function ChatSidebar({
   onClearAll,
 }: ChatSidebarProps) {
   const saved = conversations.filter((conversation) => !isEmpty(conversation));
+
+  // A saved chat can outlive its document — deleted uploads, or a stored
+  // session from an older run — so fall back to what we still know.
+  const pageName = (docId: string): string => {
+    const doc = documents.find((candidate) => candidate.doc_id === docId);
+    return doc ? shortLabel(doc) : (DOCUMENT_LABELS[docId]?.script ?? docId);
+  };
 
   return (
     <aside
@@ -69,7 +80,7 @@ export function ChatSidebar({
                         {titleFor(conversation)}
                       </span>
                       <span className="mt-0.5 block text-xs text-faint">
-                        {DOCUMENT_LABELS[conversation.docId]?.script ?? conversation.docId}
+                        {pageName(conversation.docId)}
                         {" · "}
                         {answerCount(conversation)}{" "}
                         {answerCount(conversation) === 1 ? "answer" : "answers"}

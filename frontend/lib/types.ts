@@ -109,6 +109,19 @@ export interface Correction {
   note: string;
 }
 
+/** Where a document came from. Builtins are the two cached demo pages. */
+export type DocumentOrigin = "builtin" | "upload";
+
+/**
+ * How we arrived at the document's language.
+ *
+ * This is shown to the reader, and the distinction is the same honesty beat as
+ * a refusal reason: "detected" and "script" are claims we made, "user" is a
+ * claim the reader made. Someone who can see we guessed can correct us;
+ * someone who can see we asked knows we did not guess.
+ */
+export type LanguageSource = "builtin" | "user" | "detected" | "script";
+
 export interface DigitisedDoc {
   doc_id: string;
   language: string;
@@ -117,6 +130,90 @@ export interface DigitisedDoc {
   source_filename: string;
   digitised_at: string;
   page_count: number;
+
+  /**
+   * Added with uploads. Optional on the wire because the two cached demo
+   * documents were written before these existed — the backend defaults them,
+   * but a stale cache file must never blank the whole document list.
+   */
+  origin?: DocumentOrigin;
+  label?: string;
+  language_source?: LanguageSource;
+  probe_language?: string;
+}
+
+/**
+ * A starter question the backend generated for an uploaded page.
+ *
+ * Model-authored *input*, never a citation: asking one runs the same
+ * line-anchored gate as anything the reader types.
+ */
+export interface GeneratedStarter {
+  text: string;
+  gloss: string;
+}
+
+/**
+ * Ingestion progress. `stage` is the fine-grained step; `state` is the coarse
+ * one, and either may carry the terminal value — read both, trust neither
+ * alone.
+ */
+export type JobStage =
+  | "validating"
+  | "digitising_probe"
+  | "detecting"
+  | "digitising_final"
+  | "ready"
+  | "failed"
+  | "needs_language";
+
+export type JobState = "pending" | "running" | "ready" | "failed" | "needs_language";
+
+export interface JobStatus {
+  job_id?: string;
+  state: JobState;
+  stage: JobStage;
+  /** What detection proposed, once it has. Null until then. */
+  detected_language?: string | null;
+  /** Our own dominant-script reading, e.g. "Taml". */
+  script?: string | null;
+  doc_id?: string | null;
+  /** Plain-language reason, shown verbatim. Only set when the job failed. */
+  error?: string | null;
+}
+
+/** 202 with a job to poll, or 200 when the same bytes were already digitised. */
+export interface UploadAccepted {
+  job_id: string;
+  doc_id?: string | null;
+  state?: JobState;
+}
+
+/**
+ * `needs_language` is terminal but not a failure — it is the detector
+ * declining to guess between languages that share a script, which the UI
+ * answers with a picker.
+ */
+export type JobOutcome = "ready" | "failed" | "needs_language";
+
+const TERMINAL: ReadonlySet<string> = new Set<string>([
+  "ready",
+  "failed",
+  "needs_language",
+]);
+
+export function jobOutcome(job: JobStatus): JobOutcome | null {
+  // Failure first: a job that both failed and reports a stale stage is failed.
+  if (job.state === "failed" || job.stage === "failed") return "failed";
+  if (job.state === "needs_language" || job.stage === "needs_language") {
+    return "needs_language";
+  }
+  if (job.state === "ready" || job.stage === "ready") return "ready";
+  return null;
+}
+
+export function isJobTerminal(job: JobStatus): boolean {
+  return TERMINAL.has(job.state) || TERMINAL.has(job.stage);
 }
 
 /** The model asserted a source quote and the gate refused it. */

@@ -2,17 +2,24 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AskBox } from "@/components/AskBox";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { ChatTurn } from "@/components/ChatTurn";
+import { DocumentHeader } from "@/components/DocumentHeader";
+import { DocumentSwitcher } from "@/components/DocumentSwitcher";
+import { IngestionPanel } from "@/components/IngestionPanel";
 import { NoteTurn } from "@/components/NoteTurn";
 import { NumberedDocument } from "@/components/NumberedDocument";
 import { ReaderNotes } from "@/components/ReaderNotes";
-import { ApiError, ask, listDocuments } from "@/lib/api";
+import { StarterList } from "@/components/StarterList";
+import { ApiError, ask, getDocument, listDocuments } from "@/lib/api";
 import * as store from "@/lib/conversations";
 import type { Conversation } from "@/lib/conversations";
-import { DOCUMENT_LABELS, STARTER_NOTES, STARTER_QUESTIONS } from "@/lib/questions";
+import { loadStarters, STARTER_NOTES } from "@/lib/questions";
+import type { StarterQuestion } from "@/lib/questions";
 import { isAnswer, toTurn } from "@/lib/types";
 import type { DigitisedDoc } from "@/lib/types";
+import { useIngestionJob } from "@/lib/useIngestionJob";
 
 // Enough for a demo conversation without letting context grow unbounded.
 const MAX_HISTORY_TURNS = 8;
@@ -26,6 +33,8 @@ export default function Home() {
   const [pinnedTurn, setPinnedTurn] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [starters, setStarters] = useState<StarterQuestion[]>([]);
 
   const threadEndRef = useRef<HTMLDivElement>(null);
 
@@ -72,8 +81,29 @@ export default function Home() {
   const answers = thread.filter(isAnswer);
   const activeIndex = pinnedTurn ?? answers.length - 1;
   const activeRecord = answers[activeIndex] ?? null;
-  const starters = active ? (STARTER_QUESTIONS[active.docId] ?? []) : [];
   const noteSuggestions = active ? (STARTER_NOTES[active.docId] ?? []) : [];
+
+  // Hand-written for the demo pages, generated for uploads, and an empty list
+  // when generation failed — which is a plain input, never an error.
+  useEffect(() => {
+    const docId = active?.docId;
+    if (!docId) {
+      setStarters([]);
+      return;
+    }
+
+    let cancelled = false;
+    setStarters([]);
+    void loadStarters(docId).then((list) => {
+      if (!cancelled) setStarters(list);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // digitised_at changes when a page is re-read in another language, and the
+    // old suggestions were written against the old reading.
+  }, [active?.docId, activeDoc?.digitised_at]);
 
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -106,16 +136,58 @@ export default function Home() {
     [],
   );
 
+  /**
+   * A newly digitised page becomes the live document.
+   *
+   * One document per conversation, always — so this starts a fresh one rather
+   * than pointing the current chat at a page its earlier answers never saw.
+   */
+  const adopt = useCallback(
+    async (docId: string) => {
+      let loaded = await listDocuments().catch(() => null);
+      if (!loaded) {
+        // The list is a convenience; the page itself is the point, so fall
+        // back to fetching just it.
+        const doc = await getDocument(docId).catch(() => null);
+        if (!doc) {
+          setError("That page was read, but it could not be loaded. Try reloading.");
+          return;
+        }
+        loaded = [...documents.filter((existing) => existing.doc_id !== docId), doc];
+      }
+      setDocuments(loaded);
+      setUploadOpen(false);
+      startNew(docId);
+    },
+    [documents, startNew],
+  );
+
+  const ingestion = useIngestionJob((docId) => void adopt(docId));
+
   const switchDocument = (docId: string) => {
     if (!active) return startNew(docId);
-    // An untouched chat just changes subject; a used one stays intact.
+    // An untouched chat just changes subject; a used one stays intact, and the
+    // new page starts its own. A question never reaches across two documents.
     if (store.isEmpty(active)) {
-      update(active.id, (conversation) => ({ ...conversation, docId }));
+      // Notes go too: "I'm applying to the Maldakal project" was said about a
+      // particular page, and carrying it to another one is context the reader
+      // never gave about that page.
+      update(active.id, (conversation) => ({ ...conversation, docId, corrections: [] }));
       setPinnedTurn(null);
     } else {
       startNew(docId);
     }
   };
+
+  const toggleUpload = () => {
+    // Closing the panel clears a stale rejection, but never a live job.
+    if (uploadOpen && !ingestion.busy) ingestion.reset();
+    setUploadOpen(!uploadOpen);
+  };
+
+  // The panel outlives the toggle while there is something in flight or a
+  // language question still unanswered.
+  const showIngestion = uploadOpen || ingestion.busy || ingestion.needsLanguage;
 
   const submit = useCallback(
     async (text: string) => {
@@ -212,31 +284,21 @@ export default function Home() {
           Every answer shows the line it came from — or says the page doesn&apos;t say.
         </p>
 
-        <nav className="ml-auto flex gap-1" aria-label="Choose a document">
-          {documents.map((doc) => {
-            const isActive = doc.doc_id === active?.docId;
-            return (
-              <button
-                key={doc.doc_id}
-                type="button"
-                onClick={() => switchDocument(doc.doc_id)}
-                aria-current={isActive ? "page" : undefined}
-                className={`px-3 py-1.5 text-xs transition-colors ${
-                  isActive
-                    ? "bg-ink text-paper"
-                    : "text-muted hover:bg-surface hover:text-ink"
-                }`}
-              >
-                {DOCUMENT_LABELS[doc.doc_id]?.script ?? doc.doc_id}
-              </button>
-            );
-          })}
-        </nav>
+        <DocumentSwitcher
+          documents={documents}
+          activeDocId={active?.docId ?? null}
+          onSwitch={switchDocument}
+          onToggleUpload={toggleUpload}
+          uploadOpen={showIngestion}
+        />
       </header>
+
+      {showIngestion && <IngestionPanel ingestion={ingestion} />}
 
       <main className="grid flex-1 grid-cols-1 lg:min-h-0 lg:grid-cols-[210px_minmax(380px,440px)_1fr]">
         <ChatSidebar
           conversations={conversations}
+          documents={documents}
           activeId={activeId}
           onSelect={(id) => {
             setActiveId(id);
@@ -265,34 +327,11 @@ export default function Home() {
           {/* The thread grows downward; the newest reply stays in view. */}
           <div className="flex-1 lg:min-h-0 lg:overflow-y-auto">
             {thread.length === 0 && !pending && (
-              <div className="px-5 py-5">
-                <p className="eyebrow">Ask this page anything</p>
-                <p className="mt-2 text-xs leading-relaxed text-muted">
-                  Follow-ups work — ask &ldquo;and the age limit?&rdquo; after a first
-                  answer and it knows what you mean.
-                </p>
-                <ul className="mt-4 space-y-1">
-                  {starters.map((starter) => (
-                    <li key={starter.text}>
-                      <button
-                        type="button"
-                        onClick={() => void submit(starter.text)}
-                        disabled={pending}
-                        className="w-full px-2 py-1.5 text-left transition-colors hover:bg-surface disabled:opacity-40"
-                      >
-                        <span className="font-indic block text-[0.8125rem] leading-snug text-ink">
-                          {starter.text}
-                        </span>
-                        <span className="mt-0.5 block text-xs text-faint">
-                          {starter.gloss}
-                          {starter.unanswerable && " — not on this page"}
-                          {starter.needsNote && " — needs a note above"}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <StarterList
+                starters={starters}
+                onAsk={(text) => void submit(text)}
+                disabled={pending}
+              />
             )}
 
             <ul className="divide-y divide-rule-soft">
@@ -319,60 +358,24 @@ export default function Home() {
           </div>
 
           {/* Input pinned to the bottom, where a conversation expects it. */}
-          <div className="shrink-0 border-t border-rule px-5 py-4">
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submit(question);
-              }}
-            >
-              <label htmlFor="question" className="sr-only">
-                Ask this page
-              </label>
-              <div className="flex gap-2">
-                <input
-                  id="question"
-                  value={question}
-                  onChange={(event) => setQuestion(event.target.value)}
-                  placeholder={
-                    activeDoc?.language === "te-IN" ? "మీ ప్రశ్న…" : "உங்கள் கேள்வி…"
-                  }
-                  disabled={!activeDoc || pending}
-                  className="font-indic min-w-0 flex-1 border border-rule bg-surface px-3 py-2 text-sm outline-none placeholder:text-faint focus:border-duplicator disabled:opacity-50"
-                />
-                <button
-                  type="submit"
-                  disabled={!activeDoc || pending || !question.trim()}
-                  className="shrink-0 bg-duplicator px-4 py-2 text-xs font-medium text-white transition-opacity disabled:opacity-40"
-                >
-                  {pending ? "Checking…" : "Ask"}
-                </button>
-              </div>
-            </form>
-
-            {error && (
-              <p
-                role="alert"
-                className="mt-3 border-l-2 border-seal bg-seal-wash px-3 py-2 text-xs text-seal"
-              >
-                {error}
-              </p>
-            )}
-          </div>
+          <AskBox
+            value={question}
+            onChange={setQuestion}
+            onSubmit={() => void submit(question)}
+            language={activeDoc?.language}
+            disabled={!activeDoc || pending}
+            pending={pending}
+            error={error}
+          />
         </section>
 
         {/* ---- the page itself ---- */}
         <section className="flex min-w-0 flex-col lg:min-h-0" aria-label="The document">
-          <div className="flex shrink-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-rule px-6 py-3">
-            <p className="eyebrow">
-              {activeDoc ? DOCUMENT_LABELS[activeDoc.doc_id]?.name : "No document"}
-            </p>
-            <p className="text-xs text-faint">
-              {activeDoc
-                ? `digitised from a scan · ${activeDoc.text.split("\n").length} lines`
-                : ""}
-            </p>
-          </div>
+          <DocumentHeader
+            doc={activeDoc}
+            onChooseLanguage={ingestion.chooseLanguage}
+            busy={ingestion.busy}
+          />
 
           <div className="flex-1 py-4 lg:min-h-0 lg:overflow-y-auto">
             {activeDoc ? (
@@ -382,9 +385,11 @@ export default function Home() {
                 citedTo={activeRecord?.quote_to_line ?? null}
               />
             ) : (
-              <p className="px-6 text-sm text-muted">
-                Nothing digitised yet. Run{" "}
-                <code className="font-mono text-xs">askdoc.cli digitise --doc doc_a</code>.
+              <p className="px-6 text-sm leading-relaxed text-muted">
+                No page loaded. Add one with{" "}
+                <span className="text-ink">+ Add a page</span>, or run{" "}
+                <code className="font-mono text-xs">askdoc.cli digitise --doc doc_a</code>{" "}
+                for the demo documents.
               </p>
             )}
           </div>

@@ -2,7 +2,15 @@
  * Thin client for the Python backend. One endpoint per verb, no state.
  */
 
-import type { Correction, DigitisedDoc, ThreadItem, Turn } from "./types";
+import type {
+  Correction,
+  DigitisedDoc,
+  GeneratedStarter,
+  JobStatus,
+  ThreadItem,
+  Turn,
+  UploadAccepted,
+} from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000";
 
@@ -16,12 +24,53 @@ class ApiError extends Error {
   }
 }
 
+/**
+ * Dig the server's own sentence out of an error body.
+ *
+ * An upload rejection is written for the reader ("That file is 41 MB. I can
+ * take up to 25 MB.") and must reach them in those words, not as
+ * `{"detail":"..."}`. A body we cannot read as a message is replaced rather
+ * than dumped — a stack trace or an HTML error page is noise, not an answer.
+ */
+function messageFrom(body: string, status: number): string {
+  const generic = `Request failed (${status}).`;
+  const trimmed = body.trim();
+  if (!trimmed) return generic;
+
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object") {
+      const detail = (parsed as { detail?: unknown; message?: unknown }).detail;
+      const message = (parsed as { message?: unknown }).message;
+      for (const candidate of [detail, message]) {
+        if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+        if (candidate && typeof candidate === "object") {
+          const nested = (candidate as { message?: unknown }).message;
+          if (typeof nested === "string" && nested.trim()) return nested.trim();
+        }
+      }
+    }
+  } catch {
+    // Not JSON. A short plain-text body is still worth showing.
+  }
+
+  if (trimmed.startsWith("<") || trimmed.length > 300) return generic;
+  return trimmed;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // The browser has to set multipart's boundary itself, so an explicit
+  // Content-Type on a FormData body would make the upload unparseable.
+  const isForm = typeof FormData !== "undefined" && init?.body instanceof FormData;
+
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...init,
-      headers: { "Content-Type": "application/json", ...init?.headers },
+      headers: {
+        ...(isForm ? {} : { "Content-Type": "application/json" }),
+        ...init?.headers,
+      },
     });
   } catch {
     // A dead backend is a demo-time reality, so say so in words a viewer
@@ -30,8 +79,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new ApiError(detail || `Request failed (${response.status}).`, response.status);
+    const body = await response.text().catch(() => "");
+    throw new ApiError(messageFrom(body, response.status), response.status);
   }
 
   return (await response.json()) as T;
@@ -68,6 +117,42 @@ export function ask(
     method: "POST",
     body: JSON.stringify({ doc_id: docId, question, history, corrections }),
   });
+}
+
+/**
+ * Hand a page to the backend. Returns a job to poll — or, when these exact
+ * bytes were digitised before, a finished document and no paid call.
+ */
+export function uploadDocument(file: File): Promise<UploadAccepted> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  return request<UploadAccepted>("/documents", { method: "POST", body: form });
+}
+
+export function getJob(jobId: string): Promise<JobStatus> {
+  return request<JobStatus>(`/jobs/${encodeURIComponent(jobId)}`);
+}
+
+/**
+ * Say what language the page is in — either answering a `needs_language` job,
+ * or overruling a detection that got it wrong. Re-digitises, so it returns a
+ * job like an upload does.
+ */
+export function setDocumentLanguage(
+  docId: string,
+  language: string,
+): Promise<UploadAccepted> {
+  return request<UploadAccepted>(`/documents/${encodeURIComponent(docId)}/language`, {
+    method: "POST",
+    body: JSON.stringify({ language }),
+  });
+}
+
+/** Generated starters for an uploaded page. An empty list is a valid answer. */
+export function getStarters(docId: string): Promise<GeneratedStarter[]> {
+  return request<GeneratedStarter[]>(
+    `/documents/${encodeURIComponent(docId)}/starters`,
+  );
 }
 
 export { ApiError };
