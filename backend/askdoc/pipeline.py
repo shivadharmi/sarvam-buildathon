@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Sequence
 
-from .config import NOT_STATED, QA_MODEL, RELEVANCE_CHECK, TOO_BROAD, UNVERIFIED
+from .config import NOT_STATED, QA_MODEL, RELEVANCE_CHECK, UNVERIFIED
 from .gate import check_quote
 from .lines import extract_lines, render_numbered
 from .intent import classify
@@ -36,7 +36,6 @@ from .relevance import is_relevant
 REFUSAL_TEXT = {
     RefusalReason.DOCUMENT_SILENT: NOT_STATED,
     RefusalReason.NOT_RELEVANT: NOT_STATED,
-    RefusalReason.CITATION_TOO_BROAD: TOO_BROAD,
     RefusalReason.CITATION_INVALID: UNVERIFIED,
 }
 
@@ -120,9 +119,12 @@ def ask(
 
     span = extract_lines(doc.text, claim.quote_from_line, claim.quote_to_line)
     if not span.valid:
+        # Only unresolvable ranges refuse now. Width does not: a wide citation
+        # is weaker evidence, not false evidence, and throwing away a verified
+        # answer to avoid an unimpressive citation costs the reader far more
+        # than it protects them.
         return refuse(
-            RefusalReason.CITATION_TOO_BROAD if span.too_broad
-            else RefusalReason.CITATION_INVALID,
+            RefusalReason.CITATION_INVALID,
             span.reason or "the cited lines could not be resolved",
         )
 
@@ -151,6 +153,8 @@ def ask(
         quote_end=span.end,
         quote_from_line=claim.quote_from_line,
         quote_to_line=claim.quote_to_line,
+        quote_line_count=span.line_count,
+        citation_is_broad=span.broad,
         model_quote_matched=quote_matched,
         **common,
     )

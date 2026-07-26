@@ -40,7 +40,8 @@ INTENT_SCHEMA = {
                 "type": "string",
                 "description": (
                     "If it is not a question: one short sentence, IN THE READER'S "
-                    "OWN LANGUAGE, confirming what you have noted. Empty otherwise."
+                    "OWN LANGUAGE, repeating back what you have noted about them. "
+                    "It must contain no advice and no instruction. Empty otherwise."
                 ),
             },
         },
@@ -67,9 +68,24 @@ produces a visible "this page doesn't say", which the reader can see and \
 correct. Treating a real question as a statement silently loses it, and they \
 may never realise the page could have answered them.
 
-When it is a statement, write `acknowledgement` in the SAME LANGUAGE the \
-reader used -- one short sentence confirming what you noted. Never translate \
-it to English.\
+When it is a statement, `acknowledgement` repeats their own situation back to \
+them, and does nothing else. It is a receipt, not a reply.
+
+These examples show the SHAPE only. They are written in English because this \
+instruction is in English; yours must not be.
+
+* "I am applying to the Maldakal project" -> "Noted -- you are applying to \
+the Maldakal project."
+* "I am in the ST category" -> "Noted -- you are in the ST category."
+
+Never tell the reader what to do. Do NOT write "submit your documents", \
+"apply before the last date", or any other instruction, however helpful it \
+seems. You have not read the page at this point, so any advice you give here \
+is invented -- and this product exists to not do that.
+
+Last and most important: write the acknowledgement in the SAME LANGUAGE and \
+SCRIPT the reader used. Tamil in, Tamil out. Telugu in, Telugu out. Never \
+answer in English unless they wrote in English.\
 """
 
 

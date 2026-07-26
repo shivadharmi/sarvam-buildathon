@@ -147,7 +147,13 @@ No live voice/telephony · no multi-document RAG/corpus · no legal or financial
 
 ## 7. Parking lot (only if core is done + rehearsed; never onto the critical path without an explicit rescope)
 
-Visual bbox pins · TTS read-aloud of answers (Bulbul v3) · translate answer to a third language (Mayura/Sarvam-Translate) · multi-page docs · additional languages beyond Tamil/Telugu · mobile-native polish.
+Translate answer to a third language (Mayura/Sarvam-Translate) · multi-page docs · additional languages beyond Tamil/Telugu · mobile-native polish.
+
+**Shipped 14:55 (explicit rescope):** TTS read-aloud (Bulbul v3) and STT question input (Saaras v3). STT was not on this list; it is adjacent to the §6 "no live voice/telephony" non-goal, which is read here as ruling out a voice *agent* or phone line, not a push-to-talk mic on the existing text box. Noted rather than assumed.
+
+**Visual bbox pins — rescoped, not deferred.** This was parked as blocked on data; the data is in fact stored (`Block.x1..y2`). The real blocker is **granularity**, measured on the cached docs: doc_a has **5 blocks for 65 lines** (~13 lines each), so a pin would box a fifth of the page — *coarser than the line highlight we already render*. Shipping it would make the signature feature visibly worse on the primary demo doc. Also: `Block` stores no page index, so doc_b's 2 pages are ambiguous, and doc_b is a PDF with no rasterised image. Not a time problem; a design one.
+
+**Additional languages is cheap and dishonest.** The `language` param already flows through, but with no eval doc and no hand-read ground truth we would be demoing a capability we cannot claim works. Excluded on those grounds, not on effort.
 
 ---
 
@@ -193,7 +199,9 @@ Visual bbox pins · TTS read-aloud of answers (Bulbul v3) · translate answer to
 | M4 trust UX + link | ☐ | ☐ | ☐ | ☐ |
 | M5 hardening + rehearsals | ☐ | ☐ | ☐ | ☐ |
 
-**Measured quality (`python -m askdoc.evaluate --runs N`):** **~94%** across 12 labelled cases on both documents — 8 answerable, 4 must-refuse. Observed runs: 96%, 96%, 88%, 96%, 92% — quote the range, not the best run. Every remaining miss is the same *irrelevant citation* failure (real verbatim text answering a different question), concentrated on the Tamil `விடை தெரியவில்லை` question where `தெரிவித்து` is a lexical decoy. **159 unit tests, ~72% coverage.**
+**Measured quality (`python -m askdoc.evaluate --runs N`):** **~93%** across 12 labelled cases on both documents — 8 answerable, 4 must-refuse. Observed runs: 96%, 96%, 88%, 96%, 92%, 89% — **216 trials; quote the range (88–96%), not the best run.** Every remaining miss is the same *irrelevant citation* failure (real verbatim text answering a different question), concentrated on the Tamil `விடை தெரியவில்லை` question where `தெரிவித்து` is a lexical decoy — it failed 3/3 in the M5 run.
+
+**The M5 run is the one to trust: 32/36, 4 irrelevant, and *zero false refusals*.** That asymmetry is the one that matters on stage. A false refusal is visibly wrong to anyone watching; an irrelevant citation on a question that is not in the demo set is not on the demo path at all. None of the four misses touch a scripted beat. **368 unit tests.**
 
 **Honest-refusal fix (14:00) — this had shipped broken.** "Help me understand the notification" was refused by the fixed 8-line cap and rendered to the reader as *"This page doesn't say"* — about a page that says it plainly. A limit of ours was reported as the document's silence, which is worse than a hallucination: the reader walks away believing the page lacks something it contains. Fixed on both axes — the cap is now proportional (`clamp(ceil(0.25×lines), 8, 30)`), and `RefusalReason` now distinguishes "the page is silent" from "we could not cite it", with different wording in the UI. That question now answers, citing lines 5–19.
 

@@ -82,7 +82,7 @@ class TestRefusals:
             (1, 999),      # past the end
             (4, 2),        # inverted
             (3, 3),        # blank line
-            (1, 99),  # far more than the cap allows
+            (1, 99),  # past the end of the document
         ],
     )
     def test_unusable_line_ranges_are_refused(self, doc, stub_model, from_line, to_line):
@@ -214,12 +214,20 @@ class TestRefusalsAreHonestAboutWhy:
         assert record.refusal_reason is RefusalReason.DOCUMENT_SILENT
         assert record.answer == "not stated in this document"
 
-    def test_an_over_wide_range_is_not_called_silence(self, long_doc, stub_model):
-        # 40 lines -> cap 10, so 1-30 is in bounds but far too wide.
-        stub_model(answer="x", found=True, quote_from_line=1, quote_to_line=30)
+    def test_an_over_wide_range_is_answered_and_flagged(self, long_doc, stub_model):
+        """Breadth stopped being a refusal. It is now a note on the answer.
+
+        The old behaviour refused, honestly, with its own wording -- and the
+        refusal itself was the problem: a verified citation was withheld
+        because it was unimpressive. A reader asking "what is this page about?"
+        got nothing, about a page that answers exactly that.
+        """
+        stub_model(answer="an overview", found=True, quote_from_line=1, quote_to_line=30)
         record = pipeline.ask(long_doc, "q")
-        assert record.refusal_reason is RefusalReason.CITATION_TOO_BROAD
-        assert "not stated" not in record.answer
+        assert record.status is AnswerStatus.CITED
+        assert record.refusal_reason is None
+        assert record.citation_is_broad
+        assert record.quote_line_count == 30
 
     def test_an_unresolvable_range_is_not_called_silence(self, doc, stub_model):
         stub_model(answer="x", found=True, quote_from_line=500, quote_to_line=500)
@@ -231,14 +239,16 @@ class TestRefusalsAreHonestAboutWhy:
         texts = [pipeline.REFUSAL_TEXT[reason] for reason in RefusalReason]
         # DOCUMENT_SILENT and NOT_RELEVANT deliberately share wording: both are
         # genuinely "the page does not answer this".
-        assert len(set(texts)) == 3
+        assert len(set(texts)) == 2
 
-    def test_the_detail_explains_the_limit(self, long_doc, stub_model):
-        stub_model(answer="x", found=True, quote_from_line=1, quote_to_line=30)
-        detail = pipeline.ask(long_doc, "q").rejection_detail
-        assert "may be cited" in detail
+    def test_no_refusal_reason_is_about_the_size_of_a_citation(self):
+        # The remaining reasons are all about whether an answer exists or
+        # whether it could be located. None is about how big it turned out.
+        assert not any("broad" in reason.value for reason in RefusalReason)
 
     def test_a_proportionate_span_on_a_long_page_is_cited(self, long_doc, stub_model):
-        # The case that shipped broken: a wide-but-reasonable summary span.
+        # The case that shipped broken twice: a wide-but-reasonable summary.
         stub_model(answer="overview", found=True, quote_from_line=2, quote_to_line=9)
-        assert pipeline.ask(long_doc, "q").status is AnswerStatus.CITED
+        record = pipeline.ask(long_doc, "q")
+        assert record.status is AnswerStatus.CITED
+        assert not record.citation_is_broad

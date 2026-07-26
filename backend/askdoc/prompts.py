@@ -85,9 +85,14 @@ this document, this organisation, or this scheme. If you happen to know \
 something about this subject from elsewhere, you must NOT use it.
 
 2. Set `quote_from_line` and `quote_to_line` to the SMALLEST range of lines \
-that actually proves your answer. One line is best. Never point at more than \
-8 lines, and never point at the whole document -- a citation that covers \
-everything proves nothing.
+that actually proves your answer. One line is best. A citation that covers \
+everything proves nothing, so never point at the whole document when a part \
+of it will do.
+
+But do not refuse a question because the answer is spread out. If someone \
+asks what the page is about, or asks for a summary, the honest citation IS \
+the wide one -- point at the whole run of lines that carries the answer, and \
+say so.
 
 3. The line numbers are the part that matters. Read them carefully off the \
 left margin and make sure the passage you mean really is on those lines.

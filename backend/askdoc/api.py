@@ -20,10 +20,13 @@ not found.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import (
     BackgroundTasks,
     FastAPI,
     File,
+    Form,
     HTTPException,
     Request,
     Response,
@@ -32,7 +35,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import Field
 
-from . import cache, jobs, starters
+from . import cache, jobs, starters, voice
 from .config import SUPPORTED_LANGUAGES
 from .jobs import Job, JobState, Stage
 from .models import (
@@ -305,6 +308,123 @@ def ask_question(request: AskRequest) -> AnswerRecord | NoteAcknowledgement:
             status_code=502,
             detail=f"Could not reach the model, so this question was not checked. {exc}",
         ) from exc
+
+
+class Transcript(Frozen):
+    """What we heard. Input for the reader to check, not a question we asked.
+
+    Returned on its own precisely so the caller has to put it in front of the
+    reader. A misheard question would otherwise produce a properly verified
+    citation answering something they never said -- correct by every check we
+    run, and wrong.
+    """
+
+    transcript: str
+
+
+class SpeakRequest(Frozen):
+    """Ask for audio of something already on screen.
+
+    `source` is the whole security story. "quote" carries offsets and the
+    server re-slices the text from its own cached copy, so a caller cannot put
+    words in the document's mouth. "answer" carries text, which is safe for the
+    opposite reason -- an answer was always model-authored prose and is never
+    presented as the page's words.
+    """
+
+    doc_id: str
+    source: Literal["quote", "answer"]
+
+    # source="quote": offsets into DigitisedDoc.text, exactly as the
+    # AnswerRecord reported them.
+    quote_start: int | None = Field(default=None, ge=0)
+    quote_end: int | None = Field(default=None, ge=0)
+
+    # source="answer": the prose the reader is looking at.
+    text: str = Field(default="", max_length=4000)
+
+
+class Speech(Frozen):
+    """Base64 WAV clips, played in order. Long text arrives as several."""
+
+    audios: tuple[str, ...]
+    language: str
+    #: True when the text was longer than we will synthesise. Surfaced, never
+    #: silent: audio that just stops is indistinguishable from a page that
+    #: just ends.
+    truncated: bool = False
+
+
+@app.post("/transcribe", response_model=Transcript)
+def transcribe_audio(
+    file: UploadFile = File(...),
+    doc_id: str = Form(...),
+) -> Transcript:
+    """Turn a recording into text, in the language of the page being read.
+
+    `doc_id` is required for exactly that reason: we know which document is
+    open, so the recogniser is told the language instead of guessing it.
+    """
+    doc = _require(doc_id)
+
+    # Checked before reading, not after. `voice.transcribe` enforces the same
+    # ceiling, but only once the whole body is already in memory -- which makes
+    # an oversized upload cost us the memory anyway.
+    if (file.size or 0) > voice.MAX_AUDIO_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail="That recording is too long. Ask in a sentence or two.",
+        )
+
+    try:
+        text = voice.transcribe(
+            file.file.read(),
+            filename=file.filename or "question.webm",
+            language=doc.language,
+        )
+    except AuthError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except RateLimitError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except ChatError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return Transcript(transcript=text)
+
+
+@app.post("/speak", response_model=Speech)
+def speak(request: SpeakRequest) -> Speech:
+    """Read the citation, or the answer, aloud.
+
+    Generated per click and never cached: audio is a paid call, and most
+    answers are read, not heard.
+    """
+    doc = _require(request.doc_id)
+
+    if request.source == "quote":
+        start, end = request.quote_start, request.quote_end
+        # The offsets have to resolve against *this* document's text. A range
+        # that does not is a bug or a forgery; either way there is no citation
+        # to read, and inventing one is the thing we never do.
+        if start is None or end is None or end <= start or end > len(doc.text):
+            raise HTTPException(
+                status_code=400,
+                detail="That citation doesn't line up with this page, so I won't read it aloud.",
+            )
+        body = doc.text[start:end]
+    else:
+        body = request.text
+
+    try:
+        audios, truncated = voice.synthesise(body, language=doc.language)
+    except AuthError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except RateLimitError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except ChatError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return Speech(audios=tuple(audios), language=doc.language, truncated=truncated)
 
 
 @app.get("/health")

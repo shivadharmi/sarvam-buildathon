@@ -55,6 +55,33 @@ QA_SEED = 42  # best-effort only; repeatability comes from the digitised cache
 # Re-measure with `python -m askdoc.evaluate --runs 3` before turning it on.
 RELEVANCE_CHECK = False
 
+# --- voice -------------------------------------------------------------------
+
+# Speech in. `mode` is "transcribe", not "translate": the reader's question must
+# reach the model in the language they asked it, because the document is in that
+# language and so is every line the model has to point at.
+STT_MODEL = "saaras:v3"
+STT_MODE = "transcribe"
+
+# Speech out. The speaker choice is editorial, not arbitrary: "shreya" is the
+# calm narration voice. The roster also has warm product/IVR voices and young
+# energetic ones, and reading a government circular in either would lend the
+# page a tone it does not have.
+TTS_MODEL = "bulbul:v3"
+TTS_SPEAKER = "shreya"
+TTS_SAMPLE_RATE = 22050
+
+# Long text is sent as several inputs and comes back as several clips, played
+# in order. Splitting here rather than stitching WAVs server-side.
+TTS_CHUNK_CHARS = 450
+
+# Since the span cap was removed, a citation may legitimately be the whole
+# page -- doc_a is 4478 characters end to end, which a 4000 limit cut mid-word
+# with nothing said. Silent truncation is the failure mode this product exists
+# to prevent, so the ceiling now clears any realistic single page, and anything
+# that still hits it is REPORTED rather than quietly dropped.
+MAX_SPEAK_CHARS = 12000
+
 DIGITISE_OUTPUT_FORMAT = "md"  # "markdown" is rejected with 400
 DIGITISE_TIMEOUT_S = 300  # the SDK waits forever without an explicit timeout
 
@@ -125,7 +152,6 @@ NOT_STATED = "not stated in this document"
 # ours, and wording them as silence would tell the reader the page lacks
 # something it actually contains -- the exact dishonesty this product exists
 # to prevent. Keep these distinct.
-TOO_BROAD = "the answer spans more of this page than can be quoted at once"
 UNVERIFIED = "could not verify a citation for this on the page"
 
 

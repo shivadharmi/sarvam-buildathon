@@ -4,12 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-**There is no source code yet.** The repo currently contains two planning docs and nothing else. It is not a git repository.
+**Shipped and working.** Python backend (`backend/askdoc`, FastAPI) + Next.js frontend (`frontend`), git repo on `main`. 373 tests pass; measured 92% on the labelled set. Voice in and out. Both demo documents cached to disk.
 
 - `IDEA_SCOPE_1.md` — the control plane. Read it before proposing or making any change. It owns product scope, milestones (M0–M5), acceptance tests, non-goals, and the parking lot.
 - `SOURCE_DOCS.md` — the two demo input documents (Doc A Tamil / Doc B Telugu) and their in-scope + out-of-scope demo questions.
+- `SUBMISSION.md` — submission assets and the timed demo script.
 
-**Update the "Commands" section below the moment a scaffold lands.** Do not let it stay aspirational.
+⚠️ **The backend must run with `uvicorn --reload`** or prompt edits will not take effect and you will debug the wrong code.
 
 ## What this is
 
@@ -24,7 +25,7 @@ Built solo under a hard time box: Sarvam Epoch Buildathon, Sun 26 Jul, build 10:
 1. Digitise the page (Sarvam Vision) → digitised text, NFC-normalised once, cached.
 2. Render it with **line numbers** (`lines.render_numbered`).
 3. Ask `sarvam-105b` for `{answer, found, quote_from_line, quote_to_line, supporting_quote}` — the model **points at lines**, it does not retype the quote.
-4. Deterministically verify the range: in bounds, not inverted, not blank, **≤ 8 lines** (`lines.MAX_QUOTE_LINES`).
+4. Deterministically verify the range: **in bounds, not inverted, not blank.** Width is measured and labelled, never refused — see the span-cap section below.
 5. Slice those lines out of our text — that is the citation.
 6. Range invalid → *"not stated in this document."*
 
@@ -38,9 +39,17 @@ Line anchoring makes paraphrase **structurally impossible** instead of detected-
 
 `gate.check_quote` is still used and still fully tested — now to cross-check the model's *self-reported* quote against the lines it pointed at. A mismatch is surfaced as `model_quote_matched=False` (transparency), never as a gate; the extracted lines are shown regardless.
 
-**The span cap is load-bearing.** Without it the model could point at the whole document — verbatim, passing every check, proving nothing.
+### ⚠️ The span cap was removed (15:10). Do not re-add it as a refusal.
 
-It is **proportional**, not fixed: `lines.max_quote_lines` = `clamp(ceil(0.25 × total_lines), 8, 30)`. A flat 8 was a crude proxy for "a part of the page, not the page", and it refused a legitimate 15-line answer to *"help me understand this notification"* — probably the most common thing a real reader asks of a dense official page. A quarter of the page is still unmistakably a part of it, and citing everything remains impossible at any document length.
+There used to be a hard cap — first 8 lines, then `clamp(ceil(0.25 × total), 8, 30)` — and a citation wider than it was **refused**. Both versions shipped a bug, and the second one shipped the *same* bug the first one did: *"help me understand this notification"* was answered by the page, verified end to end, and thrown away for being too wide.
+
+**The reasoning behind the cap was right about evidence and wrong about what to do.** "A citation that covers everything proves nothing" is true. But a wide citation is **weaker evidence, not false evidence** — and refusing destroyed a correct, fully verified answer in order to avoid an unimpressive one. That is the identical error as `gate.check_quote` (refused paraphrases) and `relevance.py` (refused on a mistranslation), both reverted for the same reason: *a check that destroys correct answers costs more than it saves.* Three times is a pattern, and the pattern is over-trusting our own gates.
+
+Now: width is **measured and reported, never refused.** `lines.broad_above(total)` = `clamp(ceil(0.25 × total), 8, 30)` is a **label threshold**. `LineSpan` carries `line_count` and `broad`; `AnswerRecord` carries `quote_line_count` and `citation_is_broad`; the UI appends *"· 79 lines, a large part of it"* to the line label. `RefusalReason.CITATION_TOO_BROAD` is gone.
+
+**The known cost, and it is real:** a citation spanning most of the page highlights most of the page, so the "here is exactly where this came from" signal degrades toward nothing on summary questions. The answer is still correct and the citation still verbatim; it is simply less pointed. That is a worse citation, which is the reader's to judge — it is not a reason to tell them the page is silent.
+
+The model is still told to point at the *smallest* range that proves the answer, and told explicitly not to refuse a question because the answer is spread out. Guidance, not a gate.
 
 ### ⚠️ Refusals must be honest about WHY — this shipped broken once
 
@@ -50,14 +59,15 @@ It is **proportional**, not fixed: `lines.max_quote_lines` = `clamp(ceil(0.25 ×
 |---|---|---|
 | `DOCUMENT_SILENT` | the page | "This page doesn't say." |
 | `NOT_RELEVANT` | the page | "This page doesn't say." |
-| `CITATION_TOO_BROAD` | **our limit** | "Too much of the page to quote." + how to narrow |
 | `CITATION_INVALID` | **our limit** | "Couldn't verify a citation." |
 
 The bug: an over-wide span was refused by the cap and rendered as *"This page doesn't say"* — about a page that said it plainly. **That is worse than a hallucination**, because the reader walks away believing the document lacks something it contains, and it is precisely the dishonesty this product exists to prevent.
 
 Never collapse these into one message, in the API or the UI. Pinned by `TestRefusalsAreHonestAboutWhy`.
 
-When touching this path, do not: soften a refusal into a hedge, fall back to a fuzzy/semantic match, let model-authored text become the citation, remove the span cap, or add outside knowledge. A refusal that is *correct* is a feature, not a bug to fix.
+When touching this path, do not: soften a refusal into a hedge, fall back to a fuzzy/semantic match, let model-authored text become the citation, or add outside knowledge. A refusal that is *correct* is a feature, not a bug to fix.
+
+**But a refusal is only correct when the page genuinely does not answer.** Every gate that refused for any *other* reason — paraphrase, judged irrelevance, excessive width — was measured and removed. Before adding a new one, ask what it does to a correct answer, and measure that, not just what it catches.
 
 **Known limitation, be honest about it:** verification guarantees the citation is *real*, not that it is *relevant*. The model can point at genuine verbatim text that answers a different question. No string or line check can catch that — it is a retrieval problem, a separate axis.
 
@@ -87,7 +97,7 @@ Pipeline, single document at a time, no corpus and no RAG:
 Tamil/Telugu page (PDF/PNG/JPG)
   → Sarvam Document Digitization (async job)   ← the scored capability
   → digitised text (cached to disk)
-  → grounded QA via sarvam-30b (JSON schema output)
+  → grounded QA via sarvam-105b (JSON schema output, tool-call fallback)
   → verbatim faithfulness gate  ← the core invariant
   → answer record: question · answer · highlighted quote · "not stated" state
 ```
@@ -162,6 +172,26 @@ Character evidence outranks LID **deliberately**: LID has no Assamese and answer
 - ⚠️ **A refusal recorded before a note existed is dropped from history** when corrections are present. Replaying it anchored the model into repeating the refusal even though the note now supplied what was missing — 3/3, and explicit prompt instruction did not move it. Cited turns are kept: a real citation does not go stale.
 
 **What corrections are actually for.** Glossary-style notes ("X means Y") have no headroom — sarvam-105b already bridges English↔Tamil terms and even reads through OCR errors (`అంగస్ వాడి` for `అంగన్‌వాడీ`), verified. What works is context the model **cannot infer**: the reader's own situation. "I'm applying to the Maldakal project" turns *"how many vacancies in my project?"* from a correct refusal into a cited answer on line 17. Note the refusal without the note is right, not a bug — the note supplies the missing **referent**, never the answer.
+### Voice — the invariant in a channel that has no line numbers
+
+Shipped 14:55 as an explicit rescope of §7. Two decisions carry it:
+
+**1. A transcript is never auto-sent.** `POST /transcribe` returns `{transcript}` and *nothing else*; `useVoiceInput` puts it in the input box and stops. A misheard question would otherwise produce a **fully verified citation answering something the reader never asked** — correct by every check we run, every signal on screen reading "verified", and still wrong. This is the same class of failure as the ~3% irrelevant-citation rate, except self-inflicted. Making the words visible first turns a silent failure into an obvious one. Pinned by `test_nothing_is_answered_only_transcribed`.
+
+Confirmed real, not theoretical: a TTS→STT round-trip of `தேர்வின் கால அளவு எவ்வளவு?` came back as `தேவின்` — one character dropped. That is the design working, not a bug to fix.
+
+**2. The citation is spoken by offset, never by text.** `POST /speak` with `source: "quote"` takes `quote_start`/`quote_end` and re-slices from `doc.text`; only `source: "answer"` accepts a string, and an answer was always model-authored prose. Audio has no visual distinction between the page's words and the model's, so the guarantee has to hold here for the same reason it holds on screen. Pinned by `TestTheDocumentCannotBeMisquotedAloud` — including a caller that sends both valid offsets *and* a forged `text`, and gets the document.
+
+The UI shows **two separate labelled buttons** ("The answer" / "The page"), never one. Heard rather than seen, they are indistinguishable, and the reader knowing which is which is the entire product.
+
+Refusals have no audio: that copy is in English, not the document's language, and there is no citation to read.
+
+- `STT_MODE = "transcribe"`, not `"translate"` — the question must reach the model in the language the page is written in.
+- `language_code` is the **document's** language, not `"unknown"`. We know which page is open; telling the recogniser beats making it guess.
+- Saaras accepts `webm`/`opus`/`m4a` directly, so `MediaRecorder` output is **not transcoded**.
+- `TTS_SPEAKER = "shreya"` (calm narration) is editorial: the roster's warm product/IVR and young-energetic voices would lend an official page a tone it does not have.
+- Audio is generated **per click and never prefetched** — it is a paid call and most answers are read, not heard. Clips are cached client-side so replay is free.
+
 - **Cache the digitised output of both demo docs to disk.** This is the offline fallback for a dead API during the demo, and it makes iteration fast (digitisation is the slow, paid step — don't re-run it on every code change).
 - The final artifact is an **answer record** (shareable, verifiable), not a chat log.
 
@@ -191,11 +221,11 @@ job.download_output("output.zip")
 
 **Grounded QA** — `POST /v1/chat/completions`:
 
-- Models: **`sarvam-30b`** (default choice here) or `sarvam-105b`. `sarvam-m` is **deprecated** and now errors.
+- Models: **`sarvam-105b`** (the one to use — see the verified-live table below; `sarvam-30b` cannot hold structured output and serves only as a forced-tool-call fallback). `sarvam-m` is **deprecated** and now errors.
 - `temperature=0.0` + fixed `seed`. Note `seed` is best-effort, **not guaranteed** — do not stake demo repeatability on it; stake it on the cached digitised text.
 - `response_format` = `{"type": "json_schema", "json_schema": {"name": ..., "schema": ..., "strict": true}}` to force `{answer, supporting_quote, found}`.
 - **Set `reasoning_effort=None` and keep `max_tokens` generous.** Reasoning is on by default (`sarvam-105b` defaults to `"low"`), and reasoning tokens can consume the whole budget, returning empty structured output. This is the most likely silent failure in the QA step.
-- **Do not pass `wiki_grounding`** — no longer supported on `sarvam-30b`/`sarvam-105b`. Groundedness comes from the prompt plus the string-match gate, not from this flag.
+- **Do not pass `wiki_grounding`** — no longer supported on `sarvam-30b`/`sarvam-105b`. Groundedness comes from the prompt plus line-anchored extraction, not from this flag.
 
 ## Corrections to IDEA_SCOPE_1.md §1a
 
@@ -238,7 +268,7 @@ export SARVAM_API_KEY="..."      # from dashboard.sarvam.ai; shown once at creat
 # --- backend (Python 3.12 venv via uv) ---
 cd backend
 uv venv --python 3.12 && uv pip install -U sarvamai fastapi "uvicorn[standard]" pytest pytest-cov python-multipart pypdf
-.venv/bin/python -m pytest                          # 53 tests
+.venv/bin/python -m pytest                          # 364 tests
 .venv/bin/python -m pytest --cov=askdoc --cov-report=term-missing
 
 # Run the API. ALWAYS pass --reload in dev: without it uvicorn holds the module
