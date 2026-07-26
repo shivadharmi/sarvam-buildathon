@@ -241,6 +241,12 @@ uv venv --python 3.12 && uv pip install -U sarvamai fastapi "uvicorn[standard]" 
 .venv/bin/python -m pytest                          # 53 tests
 .venv/bin/python -m pytest --cov=askdoc --cov-report=term-missing
 
+# Run the API. ALWAYS pass --reload in dev: without it uvicorn holds the module
+# it imported at boot, so new routes never appear and a POST to an existing
+# path returns 405 Method Not Allowed while the tests stay green -- TestClient
+# imports fresh from disk, so it never sees the stale process.
+.venv/bin/python -m uvicorn askdoc.api:app --port 8000 --host 127.0.0.1 --reload
+
 .venv/bin/python -m askdoc.cli digitise --doc doc_a # cached; --force re-runs the PAID call
 .venv/bin/python -m askdoc.cli show     --doc doc_a # print cached digitised text
 .venv/bin/python -m askdoc.cli ask      --doc doc_a "question" ["question2" ...]
