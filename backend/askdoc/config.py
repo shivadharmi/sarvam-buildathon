@@ -78,6 +78,14 @@ LID_MAX_CHARS = 1000  # /text-lid rejects longer input
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # the API allows 200 MB; a dense scan is 1-3 MB
 MAX_PAGES = 10  # the API's own per-job hard limit
 
+# A bound on plausibility, not validity. A three-byte file whose first bytes
+# spell JPEG is well-formed by every other check and still cannot be a page:
+# below a kilobyte there is no scan, no phone photo and no PDF that could carry
+# readable text. Digitisation is paid and rate-limited, so the only thing such a
+# file could buy is a failure. Lives here beside its upper bound because the two
+# are one policy, read by the validator and by the frontend's courtesy check.
+MIN_UPLOAD_BYTES = 1024
+
 # Every language digitisation accepts. Note /text-lid only knows 11 of these --
 # which is exactly why LID's verdict is checked against the script we can see
 # for ourselves rather than trusted outright.

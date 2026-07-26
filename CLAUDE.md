@@ -197,7 +197,7 @@ export SARVAM_API_KEY="..."      # from dashboard.sarvam.ai; shown once at creat
 
 # --- backend (Python 3.12 venv via uv) ---
 cd backend
-uv venv --python 3.12 && uv pip install -U sarvamai fastapi "uvicorn[standard]" pytest pytest-cov python-multipart
+uv venv --python 3.12 && uv pip install -U sarvamai fastapi "uvicorn[standard]" pytest pytest-cov python-multipart pypdf
 .venv/bin/python -m pytest                          # 53 tests
 .venv/bin/python -m pytest --cov=askdoc --cov-report=term-missing
 
