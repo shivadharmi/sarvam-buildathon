@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-**Shipped and working.** Python backend (`backend/askdoc`, FastAPI) + Next.js frontend (`frontend`), git repo on `main`. 373 tests pass; measured 92% on the labelled set. Voice in and out. Both demo documents cached to disk.
+**Shipped and working.** Python backend (`backend/askdoc`, FastAPI) + Next.js frontend (`frontend`), git repo on `main`. 384 tests pass. Voice in and out. Both demo documents cached to disk.
+
+**Latest measured run (M5, `--runs 3`): 32/36 correct, 4 irrelevant citations, zero false refusals** — see `IDEA_SCOPE_1.md` §10 for the breakdown. Quote the run, not a bare percentage: "correct", "irrelevant" and "false refusal" have different causes and different fixes, and collapsing them into one number hides the asymmetry that actually matters.
 
 - `IDEA_SCOPE_1.md` — the control plane. Read it before proposing or making any change. It owns product scope, milestones (M0–M5), acceptance tests, non-goals, and the parking lot.
 - `SOURCE_DOCS.md` — the two demo input documents (Doc A Tamil / Doc B Telugu) and their in-scope + out-of-scope demo questions.
@@ -268,7 +270,7 @@ export SARVAM_API_KEY="..."      # from dashboard.sarvam.ai; shown once at creat
 # --- backend (Python 3.12 venv via uv) ---
 cd backend
 uv venv --python 3.12 && uv pip install -U sarvamai fastapi "uvicorn[standard]" pytest pytest-cov python-multipart pypdf
-.venv/bin/python -m pytest                          # 364 tests
+.venv/bin/python -m pytest                          # 384 tests
 .venv/bin/python -m pytest --cov=askdoc --cov-report=term-missing
 
 # Run the API. ALWAYS pass --reload in dev: without it uvicorn holds the module
