@@ -8,11 +8,13 @@
 
 ## 0. One-line product
 
-A trustworthy reader for a dense Tamil/Telugu official document that answers plain-language questions **with a verbatim source quote — or honestly says the document doesn't say so** — so a person can act on bureaucratic paperwork without being misled.
+A trustworthy reader for a dense official document that answers plain-language questions **with a verbatim source quote — or honestly says the document doesn't say so** — so a person can act on bureaucratic paperwork without being misled.
 
-- **User:** a Tamil/Telugu speaker holding one dense official page (govt circular, insurance clause, exam notice, land record) who cannot risk a made-up answer.
+> **Scope widened post-freeze (26 Jul).** Written as Tamil/Telugu-only; uploads now accept all 23 languages Sarvam digitises, with the language detected rather than configured (§7). **The evaluation set did not widen with it** — it is still Tamil and Telugu, so those two remain the languages in which anything is *claimed*. Everywhere below that says "Tamil/Telugu" and describes a **measurement, a demo document or an acceptance test** is still exactly right and should not be broadened.
+
+- **User:** someone holding one dense official page (govt circular, insurance clause, exam notice, land record) in a language they speak but cannot parse in officialese, who cannot risk a made-up answer.
 - **Job completed:** correct, source-backed answers to real questions about *this* document, plus a clear "not stated here" when it doesn't apply.
-- **Hard input:** one dense, real Tamil/Telugu page — mixed script, legalese, tables, real capture.
+- **Hard input:** one dense, real regional-script page — mixed script, legalese, tables, real capture. Both demo documents (Tamil, Telugu) are of this kind.
 - **Final artifact / state change:** an **answer record** — each question with its exact source quote highlighted on the digitised page; shareable and verifiable, not just a chat log.
 
 ## Scored capability (choose ONE — judges score depth here)

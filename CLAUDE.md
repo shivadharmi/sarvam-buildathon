@@ -16,7 +16,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-"Ask-the-Document": a trustworthy reader for one dense Tamil/Telugu official page (govt circular, insurance clause, exam notice, land record). It answers plain-language questions **with a verbatim source quote, or honestly says the document doesn't say so.**
+"Ask-the-Document": a trustworthy reader for one dense official page (govt circular, insurance clause, exam notice, land record). It answers plain-language questions **with a verbatim source quote, or honestly says the document doesn't say so.**
+
+**Supported ≠ measured, and do not blur them.** Any of the 23 languages Sarvam digitises can be uploaded, and nothing in the citation path is language-specific. But `evalset.py` is Tamil and Telugu only, so accuracy elsewhere is *unmeasured*, not known-good. Two consequences worth carrying: only Noto Tamil/Telugu webfonts are loaded, so other Indic scripts may render as tofu (`frontend/app/layout.tsx`, `--font-indic`); and `PROBE_LANGUAGE` was never spiked. Say "accepts 23, measured on 2".
 
 Built solo under a hard time box: Sarvam Epoch Buildathon, Sun 26 Jul, build 10:30 AM–4:30 PM IST, **feature freeze 4:00 PM**, submit 4:30 PM.
 

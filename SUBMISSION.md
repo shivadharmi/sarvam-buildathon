@@ -6,7 +6,7 @@
 
 ## The 30-second context
 
-> India runs on dense official pages: a government circular, an insurance clause, an exam notice, a land record. They are written in Tamil or Telugu, they matter enormously to the person holding them, and they are almost unreadable.
+> India runs on dense official pages: a government circular, an insurance clause, an exam notice, a land record. They are written in a language the reader speaks but cannot parse in officialese, they matter enormously to the person holding them, and they are almost unreadable.
 >
 > The obvious fix — point an LLM at it — fails in the one way that matters. A confident wrong answer about your own eligibility is worse than no answer, because you act on it.
 >
@@ -19,6 +19,7 @@
 | The citation is verbatim | Sliced from our NFC-normalised copy at a verified line range. The model emits **numbers**, never quote text |
 | A refusal is honest about *why* | Distinct `RefusalReason`s: "the page doesn't say" and "we couldn't verify a citation" are never the same message. It refuses **only** when the page genuinely doesn't answer — three checks that refused for other reasons were measured and deleted |
 | It works on a second document with no code changes | doc_a Tamil, doc_b Telugu, same pipeline |
+| It accepts any Indian language, but is only *measured* in two | All 23 Sarvam digitisation languages can be uploaded, language detected not configured. The eval set is Tamil and Telugu — so "accepts 23, measured on 2" is the honest phrasing, and the one to use if asked |
 | Measured, not asserted | 12 labelled cases × 3 runs, scored for **correct / irrelevant / false refusal** |
 
 **Known limitation, stated up front:** verification guarantees the citation is *real*, not that it is *relevant*. The model can point at genuine verbatim text that answers a different question. Measured at ~3%. No string or line check can catch that — it is a retrieval problem on a separate axis.

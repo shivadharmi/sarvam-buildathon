@@ -2,7 +2,9 @@
 
 A trustworthy reader for one dense official page.
 
-It answers a plain-language question about a Tamil or Telugu government circular, insurance clause, exam notice or land record **with the exact line of the page the answer came from — or it says the page doesn't say.** There is no third state and no "I think".
+It answers a plain-language question about a government circular, insurance clause, exam notice or land record **with the exact line of the page the answer came from — or it says the page doesn't say.** There is no third state and no "I think".
+
+Upload any page in **any of the 23 languages Sarvam digitises** — 22 scheduled Indian languages plus English. The language is detected, not configured. Accuracy is **measured on Tamil and Telugu**; see [Languages: supported vs measured](#languages-supported-vs-measured) before claiming more than that.
 
 Built solo for the Sarvam Epoch Buildathon (26 Jul), in a six-hour sprint.
 
@@ -10,7 +12,7 @@ Built solo for the Sarvam Epoch Buildathon (26 Jul), in a six-hour sprint.
 
 ## The problem
 
-India runs on dense official pages. They are written in Tamil or Telugu, they matter enormously to the person holding them, and they are close to unreadable.
+India runs on dense official pages. They are written in a language the reader speaks but often cannot parse in officialese, they matter enormously to the person holding them, and they are close to unreadable. The two documents this was built and measured against are Tamil and Telugu.
 
 The obvious fix — point an LLM at the page — fails in the one way that matters. A confident wrong answer about your own eligibility is worse than no answer, because you act on it.
 
@@ -53,6 +55,19 @@ Line anchoring makes paraphrase **structurally impossible** rather than detected
 - **Voice in and out.** Ask out loud (Saaras v3); hear the answer, or hear the cited line as the page wrote it (Bulbul v3). Two separate buttons, because heard rather than seen you cannot tell the model's words from the page's — and that difference is the whole product.
 - **Multi-turn follow-ups and reader notes.** A note can change *which* lines get cited; it can never become a citation.
 - **Shareable answer records.** A link re-checks the citation against the document when it opens.
+
+### Languages: supported vs measured
+
+These are different claims and the difference is deliberate.
+
+| | |
+|---|---|
+| **Supported** | All 23 languages Sarvam digitises. Nothing in the citation path is language-specific: the model points at line numbers and we slice from our own text, which works identically in any script |
+| **Measured** | **Tamil and Telugu only.** `evalset.py` holds 12 labelled cases in those two languages. Accuracy elsewhere is *unmeasured*, not *known-good* |
+| **Known gap** | Only Noto Tamil and Noto Telugu webfonts are loaded. A page in another Indic script falls back to whatever the OS has — which on many machines is nothing, so it may render as boxes |
+| **Unspiked** | `PROBE_LANGUAGE` assumes a wrong language hint still returns correctly-scripted text. Never verified against the live digitiser |
+
+So: the pipeline accepts your Bengali page and the citation guarantee holds for it. Whether the *answers* are as good as they are in Tamil is an open question, and this README will not pretend otherwise.
 
 ### Language detection
 
