@@ -25,6 +25,10 @@ backend/uploads/
 backend/cache/up_*.json
 backend/cache/starters/
 
+# Every answer is stored here, refusals included, and that includes questions
+# asked about other people's uploaded paperwork. Never commit it.
+backend/cache/records.db
+
 # --- tooling artifacts ---
 .playwright-mcp/
 .DS_Store

@@ -3,4 +3,8 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .coverage
-cache/
+
+# NOTE: `cache/` is deliberately NOT blanket-ignored. doc_a.json and doc_b.json
+# are the offline fallback for a dead API and must ship with the repo; a blanket
+# rule here silently excluded them while three docs claimed they were committed.
+# The precise rules (uploads, records.db, starters) live in the root .gitignore.

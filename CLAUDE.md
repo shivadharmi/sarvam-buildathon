@@ -96,12 +96,20 @@ The judge mistranslated the Telugu `కోరనైనది` ("are invited") as
 Pipeline, single document at a time, no corpus and no RAG:
 
 ```
-Tamil/Telugu page (PDF/PNG/JPG)
+any page (PDF/PNG/JPG) — built-in demo doc, or uploaded
+  → validate before any paid call (magic bytes, size, ≤10 pages)   [upload.py]
   → Sarvam Document Digitization (async job)   ← the scored capability
+  → probe pass → /text-lid → script verification → re-read  [detect.py, jobs.py]
+      (built-in docs skip this: their language is known)
   → digitised text (cached to disk)
+  → question or statement?  [intent.py]
   → grounded QA via sarvam-105b (JSON schema output, tool-call fallback)
   → verbatim faithfulness gate  ← the core invariant
   → answer record: question · answer · highlighted quote · "not stated" state
+  → persisted to cache/records.db, shareable at /r/[recordId]   [records.py]
+
+alongside: speak the answer or the cited line (Bulbul v3), ask out loud
+(Saaras v3) — the transcript is shown, never auto-sent            [voice.py]
 ```
 
 - **Citation = a highlighted verbatim text span** in the rendered digitised page, addressed by line number.
@@ -147,7 +155,7 @@ Character evidence outranks LID **deliberately**: LID has no Assamese and answer
 
 **Validation runs before any paid call** (`upload.py`). Type comes from magic bytes, never the extension or the browser's `Content-Type`. Size is enforced *while streaming* with a mid-write abort, so a large upload cannot buffer into memory before being measured; `Content-Length` may refuse early but never admit. Over-limit page counts are **rejected, not truncated** — a "not stated" that means "not stated in the part I read" is a different and dishonest claim.
 
-**The job registry is in-memory, and that does not violate "the backend stores nothing between requests."** That invariant is about *session* state — history, corrections, what you asked. A job is transient plumbing for one upload; completed documents live on disk. A restart loses in-flight uploads and nothing else.
+**The job registry is in-memory, and that does not violate "the backend stores no session state."** That invariant is about history, corrections, what you asked. A job is transient plumbing for one upload; completed documents live on disk. A restart loses in-flight uploads and nothing else. (Finished answer records *are* persisted — see "Session context" below for why that is a different thing.)
 
 **A corrupt document file is loud, never skipped.** `GET /documents` lets the parse error propagate rather than quietly omitting the file. A document that vanishes from the list without a word is the same shape as "this page doesn't say" about a page that says it plainly — a confident false claim about absence. Pinned by `test_a_corrupt_document_is_loud_rather_than_missing`.
 
@@ -161,9 +169,14 @@ Character evidence outranks LID **deliberately**: LID has no Assamese and answer
 
 ### Session context — multi-turn and corrections
 
-`AskRequest` carries `history` and `corrections`; **the backend stores nothing between requests.** Reloading is therefore a complete, reliable reset (this matters for M5).
+`AskRequest` carries `history` and `corrections`; **the backend stores no session state between requests.** Reloading is therefore a complete, reliable reset (this matters for M5).
 
-⚠️ **What "reload resets" means changed with the route split.** The UI is now two pages: `/` (library + upload) and `/doc/[docId]` (reader). Reloading the reader keeps the *document* — it is addressable, not stateful — and still drops history and corrections. `lib/useConversation.ts` holds them in plain `useState` with **no persistence layer at all**; the retired `localStorage` conversation store was deleted, not merely unread, because persisted chats and "reload is a complete reset" cannot both be true. Resuming an old chat is gone with it; closing the tab loses the thread.
+⚠️ **Say "session state", not "nothing" — that stopped being true when share links shipped.** `records.py` writes **every** answer to `cache/records.db` (SQLite, stdlib), refusals included, on every `/ask`. What is persisted is the finished *artifact* — question, answer, verified line range — never the conversation. History and corrections remain client-held and are never written anywhere. The distinction is the whole point: an answer record is designed to outlive the session and be re-checked from a link; a conversation is not. Two other things follow from it, and both are load-bearing:
+
+- **`records.db` must never be committed.** It accumulates questions asked about other people's uploaded paperwork. Ignored in the root `.gitignore`.
+- **The in-memory job registry is still session-shaped plumbing**, not storage: it holds one upload in flight, and a restart loses only in-flight uploads.
+
+⚠️ **What "reload resets" means changed with the route split.** The UI is three routes: `/` (library + upload), `/doc/[docId]` (reader) and `/r/[recordId]` (a shared answer record, re-checked against the document when the link opens). Reloading the reader keeps the *document* — it is addressable, not stateful — and still drops history and corrections. `lib/useConversation.ts` holds them in plain `useState` with **no persistence layer at all**; the retired `localStorage` conversation store was deleted, not merely unread, because persisted chats and "reload is a complete reset" cannot both be true. Resuming an old chat is gone with it; closing the tab loses the thread.
 
 **Switching documents resets the conversation structurally, not by hand.** Two documents are two routes that never share a store. Note that Next reuses the reader component when only the param changes, so `useConversation` resets *during render* on `docId` change — an effect would paint one frame of doc A's answers against doc B's text. Re-digitising keeps the same id, so it calls `reload()` + `startOver()` explicitly: a new reading has new line numbers, and old citations would point nowhere.
 
@@ -174,6 +187,10 @@ Character evidence outranks LID **deliberately**: LID has no Assamese and answer
 - ⚠️ **A refusal recorded before a note existed is dropped from history** when corrections are present. Replaying it anchored the model into repeating the refusal even though the note now supplied what was missing — 3/3, and explicit prompt instruction did not move it. Cited turns are kept: a real citation does not go stale.
 
 **What corrections are actually for.** Glossary-style notes ("X means Y") have no headroom — sarvam-105b already bridges English↔Tamil terms and even reads through OCR errors (`అంగస్ వాడి` for `అంగన్‌వాడీ`), verified. What works is context the model **cannot infer**: the reader's own situation. "I'm applying to the Maldakal project" turns *"how many vacancies in my project?"* from a correct refusal into a cited answer on line 17. Note the refusal without the note is right, not a bug — the note supplies the missing **referent**, never the answer.
+
+- **Cache the digitised output of both demo docs to disk.** This is the offline fallback for a dead API during the demo, and it makes iteration fast (digitisation is the slow, paid step — don't re-run it on every code change). `doc_a.json`/`doc_b.json` are **committed**; uploads, starters and `records.db` are not.
+- The final artifact is an **answer record** (shareable, verifiable), not a chat log.
+
 ### Voice — the invariant in a channel that has no line numbers
 
 Shipped 14:55 as an explicit rescope of §7. Two decisions carry it:
@@ -188,14 +205,12 @@ The UI shows **two separate labelled buttons** ("The answer" / "The page"), neve
 
 Refusals have no audio: that copy is in English, not the document's language, and there is no citation to read.
 
+
 - `STT_MODE = "transcribe"`, not `"translate"` — the question must reach the model in the language the page is written in.
 - `language_code` is the **document's** language, not `"unknown"`. We know which page is open; telling the recogniser beats making it guess.
 - Saaras accepts `webm`/`opus`/`m4a` directly, so `MediaRecorder` output is **not transcoded**.
 - `TTS_SPEAKER = "shreya"` (calm narration) is editorial: the roster's warm product/IVR and young-energetic voices would lend an official page a tone it does not have.
 - Audio is generated **per click and never prefetched** — it is a paid call and most answers are read, not heard. Clips are cached client-side so replay is free.
-
-- **Cache the digitised output of both demo docs to disk.** This is the offline fallback for a dead API during the demo, and it makes iteration fast (digitisation is the slow, paid step — don't re-run it on every code change).
-- The final artifact is an **answer record** (shareable, verifiable), not a chat log.
 
 ## Verified Sarvam API facts
 
@@ -290,10 +305,17 @@ uv venv --python 3.12 && uv pip install -U sarvamai fastapi "uvicorn[standard]" 
 # GET  /documents                    full DigitisedDoc incl. text, newest first
 # GET  /documents/{doc_id}           |  POST /documents/{doc_id}/language {"language"}
 # GET  /documents/{doc_id}/starters  generated once, [] is a valid 200
+# POST /ask                          AnswerRecord | NoteAcknowledgement (kind:)
+#                                    every answer is saved; id on X-Record-Id
+# GET  /records/{record_id}          shared answer + its document, re-checked
+# POST /transcribe                   returns {transcript} ONLY — never answers
+# POST /speak                        source:"quote" re-slices by offset;
+#                                    source:"answer" is the only one taking text
 
 # --- frontend (Next.js 16, TS, Tailwind) ---
 # /              library + upload (ingestion waits here; failures handled here)
 # /doc/[docId]   reader — one document, always
+# /r/[recordId]  a shared answer record
 cd frontend && npm run dev                          # expects backend at NEXT_PUBLIC_API_BASE
 ```
 

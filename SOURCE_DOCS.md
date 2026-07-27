@@ -7,6 +7,13 @@ Two dense, real, regional-script bureaucratic pages for Doc A + Doc B (the "hard
 ---
 
 ## Doc A — Tamil (recommended, high confidence Tamil-script) ✅
+
+> ⚠️ **SUPERSEDED — read this before using anything below.** The URL serves the TNPSC **question-paper booklet**, not a recruitment notification: it contains no vacancies, no fees and no dates, so questions 1–3 below have no answer on the page and were never usable.
+>
+> What actually shipped is that booklet's **cover page** (`docs/doc_a_page.png`) — 13 nested Tamil instructions, mixed script, a bordered grid — digitised to 65 numbered lines. Page 96 of the same PDF is an English translation of that cover, which made it a free ground-truth oracle.
+>
+> **The live demo questions are `frontend/lib/questions.ts`; the labelled ground truth is `backend/askdoc/evalset.py`.** Both are maintained. Treat this file as the sourcing record for where the documents came from, not as the question set.
+
 **TNPSC Group IV — General recruitment notification (Tamil version)**
 - Link: https://tnpsc.gov.in/Tentative/Document/01_2024_GR_IV_GENERAL_TAMIL.pdf
 - Also browse the Tamil notifications list: https://www.tnpsc.gov.in/Tamil/Notification.aspx

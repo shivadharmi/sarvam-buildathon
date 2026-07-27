@@ -35,7 +35,7 @@
 
 ## Links
 
-- Repo: _(fill in)_
+- Repo: https://github.com/shivadharmi/sarvam-buildathon
 - Demo video fallback: _(fill in — see below)_
 - Public URL: **not deployed.** Per §4's stated fallback, the demo runs locally over screen-share
 
@@ -43,7 +43,7 @@
 
 # Demo script — 3:00
 
-Run it from a **fresh browser reload**. That is a complete reset: the backend stores nothing between requests and the conversation is deliberately not persisted, so no run can inherit anything from the run before it.
+Run it from a **fresh browser reload**. That is a complete reset: the backend keeps no session state and the conversation is deliberately not persisted, so no run can inherit anything from the run before it. (Finished *answer records* are stored, so share links survive — but nothing about the conversation does.)
 
 | Time | Beat | What to say |
 |---|---|---|
